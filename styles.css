@@ -26,6 +26,13 @@ body.drag-lock {
   touch-action: none;
 }
 
+html.phone-landscape-fullscreen,
+body.phone-landscape-fullscreen {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 body {
   font-family: "Space Grotesk", "Avenir Next", "Trebuchet MS", sans-serif;
   color: var(--ink);
