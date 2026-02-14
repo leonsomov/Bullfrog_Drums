@@ -2106,7 +2106,10 @@ class BullfrogDrums {
         if (wavMeta?.ok) {
           sample.wavMeta = wavMeta;
         }
-        await this.decodeSampleEntry(sample);
+        const ok = await this.decodeSampleEntry(sample);
+        if (!ok || !sample.buffer) {
+          sample.pathDecodeFailed = true;
+        }
       })
       .catch(() => {
         sample.pathDecodeFailed = true;
@@ -2264,6 +2267,18 @@ class BullfrogDrums {
 
     source.start(time, Math.max(0, startAt), duration);
     source.stop(time + duration + 0.02);
+    source.onended = () => {
+      try {
+        source.disconnect();
+      } catch (_error) {
+        // Ignore disconnection errors from already-released nodes.
+      }
+      try {
+        amp.disconnect();
+      } catch (_error) {
+        // Ignore disconnection errors from already-released nodes.
+      }
+    };
   }
 
   connectNodeWithTrackTone(node, trackIndex) {
@@ -2357,6 +2372,18 @@ class BullfrogDrums {
     this.connectNodeWithTrackTone(amp, trackIndex);
     osc.start(time);
     osc.stop(time + 0.4);
+    osc.onended = () => {
+      try {
+        osc.disconnect();
+      } catch (_error) {
+        // Ignore disconnection errors from already-released nodes.
+      }
+      try {
+        amp.disconnect();
+      } catch (_error) {
+        // Ignore disconnection errors from already-released nodes.
+      }
+    };
   }
 
   playSnare(trackIndex, level, time) {
@@ -2376,6 +2403,18 @@ class BullfrogDrums {
     this.connectNodeWithTrackTone(amp, trackIndex);
     toneOsc.start(time);
     toneOsc.stop(time + 0.26);
+    toneOsc.onended = () => {
+      try {
+        toneOsc.disconnect();
+      } catch (_error) {
+        // Ignore disconnection errors from already-released nodes.
+      }
+      try {
+        amp.disconnect();
+      } catch (_error) {
+        // Ignore disconnection errors from already-released nodes.
+      }
+    };
   }
 
   playClap(trackIndex, level, time) {
@@ -2407,6 +2446,18 @@ class BullfrogDrums {
     this.connectNodeWithTrackTone(amp, trackIndex);
     osc.start(time);
     osc.stop(time + 0.32);
+    osc.onended = () => {
+      try {
+        osc.disconnect();
+      } catch (_error) {
+        // Ignore disconnection errors from already-released nodes.
+      }
+      try {
+        amp.disconnect();
+      } catch (_error) {
+        // Ignore disconnection errors from already-released nodes.
+      }
+    };
   }
 
   playFx(trackIndex, level, time) {
@@ -2426,6 +2477,18 @@ class BullfrogDrums {
     this.connectNodeWithTrackTone(amp, trackIndex);
     osc.start(time);
     osc.stop(time + 0.3);
+    osc.onended = () => {
+      try {
+        osc.disconnect();
+      } catch (_error) {
+        // Ignore disconnection errors from already-released nodes.
+      }
+      try {
+        amp.disconnect();
+      } catch (_error) {
+        // Ignore disconnection errors from already-released nodes.
+      }
+    };
 
     this.playNoiseBurst(trackIndex, time, level * 0.25, Math.max(0.04, tone.decay * 0.35), 2300, 9000);
   }
@@ -2455,6 +2518,28 @@ class BullfrogDrums {
 
     source.start(time);
     source.stop(time + decay + 0.02);
+    source.onended = () => {
+      try {
+        source.disconnect();
+      } catch (_error) {
+        // Ignore disconnection errors from already-released nodes.
+      }
+      try {
+        hp.disconnect();
+      } catch (_error) {
+        // Ignore disconnection errors from already-released nodes.
+      }
+      try {
+        lp.disconnect();
+      } catch (_error) {
+        // Ignore disconnection errors from already-released nodes.
+      }
+      try {
+        amp.disconnect();
+      } catch (_error) {
+        // Ignore disconnection errors from already-released nodes.
+      }
+    };
   }
 
   makeNoiseBuffer() {
@@ -2577,12 +2662,19 @@ class BullfrogDrums {
 
   async decodeSampleEntry(entry) {
     if (!this.audioCtx || !entry || entry.buffer || !entry.arrayBuffer) {
-      return;
+      return Boolean(entry?.buffer);
     }
     try {
       entry.buffer = await this.audioCtx.decodeAudioData(entry.arrayBuffer.slice(0));
+      entry.decodeFailed = false;
+      return true;
     } catch (_error) {
       entry.buffer = null;
+      entry.decodeFailed = true;
+      if (entry.path) {
+        entry.pathDecodeFailed = true;
+      }
+      return false;
     }
   }
 
