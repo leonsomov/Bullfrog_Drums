@@ -148,6 +148,7 @@ class BullfrogDrums {
     this.samplePreviewTimeout = null;
     this.stepAutomation = Array.from({ length: SEQ_STEPS }, () => ({}));
     this.dragLockCount = 0;
+    this.lockedScrollY = 0;
 
     this.audioCtx = null;
     this.masterInput = null;
@@ -169,13 +170,16 @@ class BullfrogDrums {
     this.renderMainDisplay();
     this.renderStepDisplay();
     this.applyControlState();
-    this.setTempo(120);
     this.updateSampleReadyLed();
     this.renderVoiceManager();
+    this.randomizePatternAndKit();
+    this.bindAdaptiveLayout();
     this.autoloadGeekyFactoryPack();
   }
 
   readDom() {
+    this.sceneEl = document.querySelector(".scene");
+    this.machineEl = document.querySelector(".machine");
     this.levelKnobs = document.getElementById("levelKnobs");
     this.toneKnobs = document.getElementById("toneKnobs");
     this.masterDataKnob = document.getElementById("masterDataKnob");
