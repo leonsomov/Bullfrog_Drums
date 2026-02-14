@@ -157,6 +157,10 @@ class BullfrogDrums {
     this.masterPan = null;
     this.masterLimiter = null;
     this.masterGain = null;
+    this.trackInputs = [];
+    this.trackFilters = [];
+    this.trackDrives = [];
+    this.trackPans = [];
     this.noiseBuffer = null;
 
     this.readDom();
@@ -587,6 +591,7 @@ class BullfrogDrums {
     this.masterFilter.Q.setTargetAtTime(0.707, now, 0.01);
     this.setPanValue(this.masterPan, 0, now, 0.01);
     this.masterDrive.curve = this.makeDriveCurve(0);
+    this.applyAllTrackToneStates();
   }
 
   buildSequencer() {
@@ -1886,7 +1891,59 @@ class BullfrogDrums {
     this.masterLimiter.connect(this.masterGain);
     this.masterGain.connect(this.audioCtx.destination);
 
+    this.trackInputs = [];
+    this.trackFilters = [];
+    this.trackDrives = [];
+    this.trackPans = [];
+    for (let trackIndex = 0; trackIndex < TRACKS.length; trackIndex += 1) {
+      const input = this.audioCtx.createGain();
+      const filter = this.audioCtx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = 18000;
+      filter.Q.value = 0.707;
+      const drive = this.audioCtx.createWaveShaper();
+      drive.oversample = "4x";
+      drive.curve = this.makeDriveCurve(0);
+      const pan = this.createPanNode(0);
+
+      input.connect(filter);
+      filter.connect(drive);
+      drive.connect(pan);
+      pan.connect(this.masterInput);
+
+      this.trackInputs.push(input);
+      this.trackFilters.push(filter);
+      this.trackDrives.push(drive);
+      this.trackPans.push(pan);
+    }
+
     this.noiseBuffer = this.makeNoiseBuffer();
+    this.applyAllTrackToneStates();
+  }
+
+  applyTrackToneState(trackIndex) {
+    if (!this.audioCtx) {
+      return;
+    }
+    const safeTrack = this.clamp(Math.round(trackIndex), 0, TRACKS.length - 1);
+    const tone = this.getVoiceTone(safeTrack);
+    const filter = this.trackFilters[safeTrack];
+    const drive = this.trackDrives[safeTrack];
+    const pan = this.trackPans[safeTrack];
+    if (!filter || !drive || !pan) {
+      return;
+    }
+    const now = this.audioCtx.currentTime;
+    filter.frequency.setTargetAtTime(Math.max(40, tone.cutoff), now, 0.01);
+    filter.Q.setTargetAtTime(Math.max(0.1, tone.resonance), now, 0.01);
+    drive.curve = this.makeDriveCurve(this.clamp(tone.drive, 0, 1));
+    this.setPanValue(pan, this.clamp(tone.pan, -1, 1), now, 0.01);
+  }
+
+  applyAllTrackToneStates() {
+    for (let trackIndex = 0; trackIndex < TRACKS.length; trackIndex += 1) {
+      this.applyTrackToneState(trackIndex);
+    }
   }
 
   createPanNode(initialPan = 0) {
