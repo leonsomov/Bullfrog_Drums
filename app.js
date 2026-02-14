@@ -1990,10 +1990,14 @@ class BullfrogDrums {
           this.playSampleBuffer(trackIndex, sample.buffer, level, time);
           return;
         }
-        // Keep real sample identity while decode is pending; fallback to internal only if HTML playback fails.
-        this.playHtmlAudioSample(trackIndex, sample.path, level, () => {
-          this.playInternalVoice(trackIndex, level, time);
-        });
+        // Avoid per-hit HTML media element playback while sequencer is running on mobile.
+        if (allowHtmlFallback || (!this.isPlaying && sample.pathDecodeFailed)) {
+          this.playHtmlAudioSample(trackIndex, sample.path, level, () => {
+            this.playInternalVoice(trackIndex, level, time);
+          });
+          return;
+        }
+        this.playInternalVoice(trackIndex, level, time);
         return;
       }
       if (sample.arrayBuffer && this.audioCtx) {
