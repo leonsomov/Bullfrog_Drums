@@ -2058,7 +2058,7 @@ class BullfrogDrums {
     }
     this.indicateTrackLoudness(trackIndex, level, time);
 
-    const { slot: activeSlot, sample } = this.getPlaybackSampleForTrack(trackIndex);
+    const { sample } = this.getPlaybackSampleForTrack(trackIndex);
     if (sample) {
       if (sample.buffer) {
         this.playSampleBuffer(trackIndex, sample.buffer, level, time);
