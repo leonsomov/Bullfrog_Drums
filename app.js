@@ -1329,27 +1329,61 @@ class BullfrogDrums {
     }
 
     const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1200;
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 800;
     const mobile = viewportWidth <= 1180;
+    const phoneLike = Math.min(viewportWidth, viewportHeight) <= 920;
+    const landscape = viewportWidth > viewportHeight;
+    const landscapeFullscreen = mobile && phoneLike && landscape;
+
+    const resetFullscreenClasses = () => {
+      document.body.classList.remove("phone-landscape-fullscreen");
+      document.documentElement.classList.remove("phone-landscape-fullscreen");
+    };
+
     if (!mobile) {
       this.machineEl.style.transform = "";
       this.machineEl.style.transformOrigin = "";
       this.machineEl.style.width = "";
       this.machineEl.style.minWidth = "";
       this.sceneEl.style.minHeight = "";
+      this.sceneEl.style.height = "";
+      this.sceneEl.style.padding = "";
+      this.sceneEl.style.overflow = "";
+      resetFullscreenClasses();
       return;
     }
 
     const desktopWidth = 1800;
-    const safeWidth = Math.max(320, viewportWidth - 10);
-    const scale = this.clamp(safeWidth / desktopWidth, 0.42, 1);
-
     this.machineEl.style.width = `${desktopWidth}px`;
     this.machineEl.style.minWidth = `${desktopWidth}px`;
+    const rawHeight = this.machineEl.scrollHeight;
+    const safeWidth = Math.max(320, viewportWidth - 10);
+    const widthScale = safeWidth / desktopWidth;
+
+    if (landscapeFullscreen) {
+      const safeHeight = Math.max(220, viewportHeight - 2);
+      const heightScale = safeHeight / rawHeight;
+      const scale = this.clamp(Math.min(widthScale, heightScale), 0.3, 1);
+
+      this.machineEl.style.transformOrigin = "top center";
+      this.machineEl.style.transform = `scale(${scale})`;
+      this.sceneEl.style.minHeight = `${Math.ceil(viewportHeight)}px`;
+      this.sceneEl.style.height = `${Math.ceil(viewportHeight)}px`;
+      this.sceneEl.style.padding = "0";
+      this.sceneEl.style.overflow = "hidden";
+      document.body.classList.add("phone-landscape-fullscreen");
+      document.documentElement.classList.add("phone-landscape-fullscreen");
+      return;
+    }
+
+    const scale = this.clamp(widthScale, 0.42, 1);
     this.machineEl.style.transformOrigin = "top center";
     this.machineEl.style.transform = `scale(${scale})`;
-
-    const rawHeight = this.machineEl.scrollHeight;
     this.sceneEl.style.minHeight = `${Math.ceil(rawHeight * scale + 12)}px`;
+    this.sceneEl.style.height = "";
+    this.sceneEl.style.padding = "";
+    this.sceneEl.style.overflow = "";
+    resetFullscreenClasses();
   }
 
   beginDragLock() {
