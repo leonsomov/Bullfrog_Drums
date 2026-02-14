@@ -2264,26 +2264,14 @@ class BullfrogDrums {
     if (!this.audioCtx || !this.masterInput || !node) {
       return [];
     }
-    const tone = this.getVoiceTone(trackIndex);
-
-    const filter = this.audioCtx.createBiquadFilter();
-    filter.type = "lowpass";
-    filter.frequency.value = Math.max(40, tone.cutoff);
-    filter.Q.value = Math.max(0.1, tone.resonance);
-
-    const drive = this.audioCtx.createWaveShaper();
-    drive.oversample = "4x";
-    drive.curve = this.makeDriveCurve(this.clamp(tone.drive, 0, 1));
-
-    const pan = this.createPanNode(this.clamp(tone.pan, -1, 1));
-    this.setPanValue(pan, this.clamp(tone.pan, -1, 1), this.audioCtx.currentTime, 0.005);
-
-    node.connect(filter);
-    filter.connect(drive);
-    drive.connect(pan);
-    pan.connect(this.masterInput);
-
-    return [filter, drive, pan];
+    const safeTrack = this.clamp(Math.round(trackIndex), 0, TRACKS.length - 1);
+    const input = this.trackInputs[safeTrack];
+    if (!input) {
+      node.connect(this.masterInput);
+      return [];
+    }
+    node.connect(input);
+    return [input];
   }
 
   findNearestZeroCrossing(buffer, centerSample, searchRadius = 1024) {
