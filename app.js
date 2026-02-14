@@ -161,6 +161,7 @@ class BullfrogDrums {
     this.trackPreDrives = [];
     this.trackFilters = [];
     this.trackFilterStages = [];
+    this.trackResPeaks = [];
     this.trackDrives = [];
     this.trackPans = [];
     this.noiseBuffer = null;
@@ -2018,6 +2019,7 @@ class BullfrogDrums {
     this.trackPreDrives = [];
     this.trackFilters = [];
     this.trackFilterStages = [];
+    this.trackResPeaks = [];
     this.trackDrives = [];
     this.trackPans = [];
     for (let trackIndex = 0; trackIndex < TRACKS.length; trackIndex += 1) {
@@ -2032,6 +2034,11 @@ class BullfrogDrums {
         filter.Q.value = 0.707;
         return filter;
       });
+      const resonancePeak = this.audioCtx.createBiquadFilter();
+      resonancePeak.type = "peaking";
+      resonancePeak.frequency.value = 1200;
+      resonancePeak.Q.value = 1.2;
+      resonancePeak.gain.value = 0;
       const drive = this.audioCtx.createWaveShaper();
       drive.oversample = "4x";
       drive.curve = this.makeDriveCurve(0);
@@ -2042,7 +2049,8 @@ class BullfrogDrums {
       filterStages[0].connect(filterStages[1]);
       filterStages[1].connect(filterStages[2]);
       filterStages[2].connect(filterStages[3]);
-      filterStages[3].connect(drive);
+      filterStages[3].connect(resonancePeak);
+      resonancePeak.connect(drive);
       drive.connect(pan);
       pan.connect(this.masterInput);
 
@@ -2050,6 +2058,7 @@ class BullfrogDrums {
       this.trackPreDrives.push(preDrive);
       this.trackFilters.push(filterStages[0]);
       this.trackFilterStages.push(filterStages);
+      this.trackResPeaks.push(resonancePeak);
       this.trackDrives.push(drive);
       this.trackPans.push(pan);
     }
@@ -2066,27 +2075,32 @@ class BullfrogDrums {
     const tone = this.getVoiceTone(safeTrack);
     const preDrive = this.trackPreDrives[safeTrack];
     const filterStages = this.trackFilterStages[safeTrack];
+    const resonancePeak = this.trackResPeaks[safeTrack];
     const drive = this.trackDrives[safeTrack];
     const pan = this.trackPans[safeTrack];
-    if (!preDrive || !filterStages || filterStages.length === 0 || !drive || !pan) {
+    if (!preDrive || !filterStages || filterStages.length === 0 || !resonancePeak || !drive || !pan) {
       return;
     }
     const now = this.audioCtx.currentTime;
     const ladderCutoff = this.mapCutoffToLadderFrequency(tone.cutoff);
     const q = this.mapResonanceToLadderQ(tone.resonance);
-    const resonanceDrive = this.clamp((q - 0.35) / 18, 0, 1);
-    const preDriveAmount = this.clamp(0.1 + resonanceDrive * 0.48 + tone.drive * 0.34, 0, 1);
+    const resonanceNorm = this.clamp((q - 0.45) / 22, 0, 1);
+    const preDriveAmount = this.clamp(0.13 + resonanceNorm * 0.58 + tone.drive * 0.34, 0, 1);
     preDrive.curve = this.makeDriveCurve(preDriveAmount);
-    drive.curve = this.makeDriveCurve(this.clamp(tone.drive * 0.95, 0, 1));
+    drive.curve = this.makeDriveCurve(this.clamp(tone.drive * 0.92 + resonanceNorm * 0.08, 0, 1));
 
-    const cutoffMultipliers = [1.26, 1.06, 0.9, 0.74];
-    const qWeights = [0.22, 0.34, 0.5, 0.7];
+    const cutoffMultipliers = [1.3, 1.08, 0.9, 0.72];
+    const qWeights = [0.18, 0.3, 0.52, 0.84];
     filterStages.forEach((filter, index) => {
       const stageCutoff = this.clamp(ladderCutoff * (cutoffMultipliers[index] || 1), 38, 18000);
-      const stageQ = this.clamp(0.28 + q * (qWeights[index] || 0.25), 0.1, 24);
+      const stageQ = this.clamp(0.25 + q * (qWeights[index] || 0.25), 0.1, 28);
       filter.frequency.setTargetAtTime(stageCutoff, now, 0.01);
       filter.Q.setTargetAtTime(stageQ, now, 0.01);
     });
+
+    resonancePeak.frequency.setTargetAtTime(this.clamp(ladderCutoff * 0.92, 45, 15000), now, 0.01);
+    resonancePeak.Q.setTargetAtTime(this.clamp(0.7 + q * 0.62, 0.5, 28), now, 0.01);
+    resonancePeak.gain.setTargetAtTime(-1 + resonanceNorm * 18, now, 0.01);
 
     this.setPanValue(pan, this.clamp(tone.pan, -1, 1), now, 0.01);
   }
@@ -2095,15 +2109,15 @@ class BullfrogDrums {
     const minIn = CONTROL_DEFS.find((def) => def.id === "cutoff")?.min ?? 60;
     const maxIn = CONTROL_DEFS.find((def) => def.id === "cutoff")?.max ?? 16000;
     const norm = this.clamp((cutoffValue - minIn) / Math.max(1, maxIn - minIn), 0, 1);
-    const shaped = Math.pow(norm, 1.82);
-    return 44 + shaped * (13800 - 44);
+    const shaped = Math.pow(norm, 2.05);
+    return 38 + shaped * (12600 - 38);
   }
 
   mapResonanceToLadderQ(resonanceValue) {
     const minIn = CONTROL_DEFS.find((def) => def.id === "resonance")?.min ?? 0.4;
     const maxIn = CONTROL_DEFS.find((def) => def.id === "resonance")?.max ?? 24;
     const norm = this.clamp((resonanceValue - minIn) / Math.max(0.001, maxIn - minIn), 0, 1);
-    return 0.35 + Math.pow(norm, 1.5) * 18;
+    return 0.45 + Math.pow(norm, 1.25) * 22;
   }
 
   applyAllTrackToneStates() {
