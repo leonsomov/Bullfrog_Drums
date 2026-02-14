@@ -1347,6 +1347,7 @@ class BullfrogDrums {
       this.machineEl.style.minWidth = "";
       this.sceneEl.style.minHeight = "";
       this.sceneEl.style.height = "";
+      this.sceneEl.style.width = "";
       this.sceneEl.style.padding = "";
       this.sceneEl.style.overflow = "";
       resetFullscreenClasses();
@@ -1357,7 +1358,7 @@ class BullfrogDrums {
     this.machineEl.style.width = `${desktopWidth}px`;
     this.machineEl.style.minWidth = `${desktopWidth}px`;
     const rawHeight = this.machineEl.scrollHeight;
-    const safeWidth = Math.max(320, viewportWidth - 10);
+    const safeWidth = Math.max(320, viewportWidth - (landscapeFullscreen ? 0 : 10));
     const widthScale = safeWidth / desktopWidth;
 
     if (landscapeFullscreen) {
@@ -1369,6 +1370,7 @@ class BullfrogDrums {
       this.machineEl.style.transform = `scale(${scale})`;
       this.sceneEl.style.minHeight = `${Math.ceil(viewportHeight)}px`;
       this.sceneEl.style.height = `${Math.ceil(viewportHeight)}px`;
+      this.sceneEl.style.width = `${Math.ceil(viewportWidth)}px`;
       this.sceneEl.style.padding = "0";
       this.sceneEl.style.overflow = "hidden";
       document.body.classList.add("phone-landscape-fullscreen");
@@ -1381,6 +1383,7 @@ class BullfrogDrums {
     this.machineEl.style.transform = `scale(${scale})`;
     this.sceneEl.style.minHeight = `${Math.ceil(rawHeight * scale + 12)}px`;
     this.sceneEl.style.height = "";
+    this.sceneEl.style.width = "";
     this.sceneEl.style.padding = "";
     this.sceneEl.style.overflow = "";
     resetFullscreenClasses();
