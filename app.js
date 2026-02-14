@@ -424,10 +424,10 @@ class BullfrogDrums {
       const slotValue = Math.round(effectiveValue);
       const cappedSlot = this.normalizePlaybackSlot(slotValue);
       if (this.dataMode === "sample") {
-        this.voiceActiveSlots[this.selectedTrackIndex] = cappedSlot;
-        this.selectedSlotIndex = cappedSlot;
+        const resolvedSlot = this.resolvePlaybackSlotForVoice(this.selectedTrackIndex, cappedSlot, { mutate: true });
+        this.selectedSlotIndex = resolvedSlot;
         this.activeVoiceIndex = this.selectedTrackIndex;
-        this.prepareSampleForPlayback(this.selectedTrackIndex, cappedSlot);
+        this.prepareSampleForPlayback(this.selectedTrackIndex, resolvedSlot);
       } else if (this.dataMode === "track") {
         const trackValue = this.clamp(slotValue, 0, TRACKS.length - 1);
         this.setSelectedTrack(trackValue);
@@ -512,13 +512,71 @@ class BullfrogDrums {
     return this.clamp(Math.round(Number(slot) || 0), 0, GEEKY_TARGET_PER_VOICE - 1);
   }
 
+  getAvailableSlotsForVoice(voiceIndex, options = {}) {
+    const { geekyOnly = true } = options;
+    const safeVoice = this.clamp(Math.round(voiceIndex), 0, TRACKS.length - 1);
+    const maxSlot = geekyOnly ? GEEKY_TARGET_PER_VOICE : SLOTS_PER_VOICE;
+    const available = [];
+    const bank = this.sampleBanks[safeVoice];
+    for (let slot = 0; slot < maxSlot; slot += 1) {
+      if (bank?.[slot]) {
+        available.push(slot);
+      }
+    }
+    return available;
+  }
+
+  resolvePlaybackSlotForVoice(voiceIndex, requestedSlot, options = {}) {
+    const { mutate = true } = options;
+    const safeVoice = this.clamp(Math.round(voiceIndex), 0, TRACKS.length - 1);
+    const normalized = this.normalizePlaybackSlot(requestedSlot);
+    const bank = this.sampleBanks[safeVoice];
+
+    let resolved = normalized;
+    if (!bank?.[resolved]) {
+      const available = this.getAvailableSlotsForVoice(safeVoice);
+      if (available.length > 0) {
+        resolved = available.reduce(
+          (best, slot) => (Math.abs(slot - normalized) < Math.abs(best - normalized) ? slot : best),
+          available[0]
+        );
+      }
+    }
+
+    if (mutate) {
+      this.voiceActiveSlots[safeVoice] = resolved;
+    }
+    return resolved;
+  }
+
+  getPlaybackSampleForTrack(trackIndex) {
+    const safeTrack = this.clamp(Math.round(trackIndex), 0, TRACKS.length - 1);
+    const resolvedSlot = this.resolvePlaybackSlotForVoice(safeTrack, this.voiceActiveSlots[safeTrack], { mutate: true });
+    return {
+      slot: resolvedSlot,
+      sample: this.sampleBanks[safeTrack]?.[resolvedSlot] || null
+    };
+  }
+
+  normalizeVoiceSlotsToLoadedSamples() {
+    for (let voiceIndex = 0; voiceIndex < TRACKS.length; voiceIndex += 1) {
+      const resolved = this.resolvePlaybackSlotForVoice(voiceIndex, this.voiceActiveSlots[voiceIndex], { mutate: true });
+      this.prepareSampleForPlayback(voiceIndex, resolved);
+    }
+    this.selectedSlotIndex = this.resolvePlaybackSlotForVoice(this.selectedTrackIndex, this.selectedSlotIndex, { mutate: false });
+  }
+
   setKitSlotForAllVoices(slot) {
     const normalized = this.normalizePlaybackSlot(slot);
+    let selectedResolved = normalized;
     for (let voiceIndex = 0; voiceIndex < TRACKS.length; voiceIndex += 1) {
-      this.voiceActiveSlots[voiceIndex] = normalized;
-      this.prepareSampleForPlayback(voiceIndex, normalized);
+      const resolved = this.resolvePlaybackSlotForVoice(voiceIndex, normalized, { mutate: true });
+      this.prepareSampleForPlayback(voiceIndex, resolved);
+      if (voiceIndex === this.selectedTrackIndex) {
+        selectedResolved = resolved;
+      }
     }
-    this.selectedSlotIndex = normalized;
+    this.selectedSlotIndex = selectedResolved;
     this.activeVoiceIndex = this.selectedTrackIndex;
   }
 
@@ -1572,12 +1630,7 @@ class BullfrogDrums {
 
   randomizeVoiceSlotsFromLoaded() {
     for (let voiceIndex = 0; voiceIndex < TRACKS.length; voiceIndex += 1) {
-      const available = [];
-      for (let slot = 0; slot < SLOTS_PER_VOICE; slot += 1) {
-        if (slot < GEEKY_TARGET_PER_VOICE && this.sampleBanks[voiceIndex][slot]) {
-          available.push(slot);
-        }
-      }
+      const available = this.getAvailableSlotsForVoice(voiceIndex);
       if (available.length > 0) {
         this.voiceActiveSlots[voiceIndex] = available[Math.floor(Math.random() * available.length)];
       } else {
@@ -2005,9 +2058,7 @@ class BullfrogDrums {
     }
     this.indicateTrackLoudness(trackIndex, level, time);
 
-    const activeSlot = this.normalizePlaybackSlot(this.voiceActiveSlots[trackIndex]);
-    this.voiceActiveSlots[trackIndex] = activeSlot;
-    const sample = this.sampleBanks[trackIndex][activeSlot];
+    const { slot: activeSlot, sample } = this.getPlaybackSampleForTrack(trackIndex);
     if (sample) {
       if (sample.buffer) {
         this.playSampleBuffer(trackIndex, sample.buffer, level, time);
@@ -2031,7 +2082,7 @@ class BullfrogDrums {
         this.playInternalVoice(trackIndex, level, time);
         return;
       }
-      if (sample.arrayBuffer && this.audioCtx) {
+      if (sample.arrayBuffer && this.audioCtx && !sample.decodeFailed) {
         this.decodeSampleEntry(sample);
         if (sample.buffer) {
           this.playSampleBuffer(trackIndex, sample.buffer, level, time);
@@ -2602,7 +2653,7 @@ class BullfrogDrums {
   }
 
   async loadArrayBufferToSlot(voiceIndex, slotIndex, arrayBuffer, name, type, options = {}) {
-    const { silent = false, skipRender = false, dataBase64 = null } = options;
+    const { silent = false, skipRender = false, dataBase64 = null, path = null } = options;
 
     const wavMeta = this.parseWavMetadata(arrayBuffer);
     const validation = this.validateWavMetadata(wavMeta);
@@ -2622,7 +2673,11 @@ class BullfrogDrums {
       wavMeta,
       buffer: decoded,
       arrayBuffer: arrayBuffer.slice(0),
-      dataBase64
+      dataBase64,
+      path,
+      decodePromise: null,
+      decodeFailed: false,
+      pathDecodeFailed: false
     };
 
     this.updateSampleReadyLed();
@@ -2689,18 +2744,96 @@ class BullfrogDrums {
     if (!this.audioCtx || !entry || entry.buffer || !entry.arrayBuffer) {
       return Boolean(entry?.buffer);
     }
+    if (entry.decodeFailed) {
+      return false;
+    }
     try {
       entry.buffer = await this.audioCtx.decodeAudioData(entry.arrayBuffer.slice(0));
       entry.decodeFailed = false;
       return true;
     } catch (_error) {
+      const fallback = this.decodePcm16WavToAudioBuffer(entry.arrayBuffer);
+      if (fallback) {
+        entry.buffer = fallback;
+        entry.decodeFailed = false;
+        return true;
+      }
       entry.buffer = null;
       entry.decodeFailed = true;
-      if (entry.path) {
-        entry.pathDecodeFailed = true;
-      }
       return false;
     }
+  }
+
+  decodePcm16WavToAudioBuffer(arrayBuffer) {
+    if (!this.audioCtx || !arrayBuffer) {
+      return null;
+    }
+    const view = new DataView(arrayBuffer);
+    if (view.byteLength < 44) {
+      return null;
+    }
+
+    const riff = this.readAscii(view, 0, 4);
+    const wave = this.readAscii(view, 8, 4);
+    if (riff !== "RIFF" || wave !== "WAVE") {
+      return null;
+    }
+
+    let offset = 12;
+    let fmt = null;
+    let dataOffset = -1;
+    let dataSize = 0;
+
+    while (offset + 8 <= view.byteLength) {
+      const chunkId = this.readAscii(view, offset, 4);
+      const size = view.getUint32(offset + 4, true);
+      const dataStart = offset + 8;
+
+      if (chunkId === "fmt " && size >= 16 && dataStart + 16 <= view.byteLength) {
+        fmt = {
+          audioFormat: view.getUint16(dataStart, true),
+          channels: view.getUint16(dataStart + 2, true),
+          sampleRate: view.getUint32(dataStart + 4, true),
+          bitsPerSample: view.getUint16(dataStart + 14, true)
+        };
+      } else if (chunkId === "data" && dataStart + size <= view.byteLength) {
+        dataOffset = dataStart;
+        dataSize = size;
+      }
+
+      offset = dataStart + size + (size % 2);
+      if (offset > view.byteLength) {
+        break;
+      }
+    }
+
+    if (!fmt || dataOffset < 0) {
+      return null;
+    }
+    if (fmt.audioFormat !== 1 || fmt.bitsPerSample !== 16 || fmt.channels < 1) {
+      return null;
+    }
+
+    const channels = fmt.channels;
+    const frameSize = channels * 2;
+    const frameCount = Math.floor(dataSize / frameSize);
+    if (frameCount <= 0) {
+      return null;
+    }
+
+    const audioBuffer = this.audioCtx.createBuffer(channels, frameCount, fmt.sampleRate);
+    for (let channel = 0; channel < channels; channel += 1) {
+      const channelData = audioBuffer.getChannelData(channel);
+      for (let frame = 0; frame < frameCount; frame += 1) {
+        const sampleIndex = dataOffset + frame * frameSize + channel * 2;
+        if (sampleIndex + 1 >= view.byteLength) {
+          channelData[frame] = 0;
+          continue;
+        }
+        channelData[frame] = view.getInt16(sampleIndex, true) / 32768;
+      }
+    }
+    return audioBuffer;
   }
 
   async autoloadGeekyFactoryPack() {
@@ -2719,7 +2852,8 @@ class BullfrogDrums {
           const arrayBuffer = await response.arrayBuffer();
           await this.loadArrayBufferToSlot(voiceIndex, slotIndex, arrayBuffer, `${slotIndex}.wav`, "audio/wav", {
             silent: true,
-            skipRender: true
+            skipRender: true,
+            path
           });
           loaded += 1;
         } catch (_error) {
@@ -2734,7 +2868,10 @@ class BullfrogDrums {
             buffer: null,
             arrayBuffer: null,
             dataBase64: null,
-            path
+            path,
+            decodePromise: null,
+            decodeFailed: false,
+            pathDecodeFailed: false
           };
           loaded += 1;
           failed += 1;
@@ -2745,6 +2882,7 @@ class BullfrogDrums {
     this.activeVoiceIndex = 0;
     this.selectedTrackIndex = 0;
     this.selectedSlotIndex = 0;
+    this.normalizeVoiceSlotsToLoadedSamples();
     this.updateSampleReadyLed();
     this.renderVoiceManager();
     this.syncDataKnobToCurrentMode();
@@ -2833,6 +2971,7 @@ class BullfrogDrums {
     }
 
     this.renderVoiceManager();
+    this.normalizeVoiceSlotsToLoadedSamples();
 
     const issueSummary = [...parseIssues, ...loadIssues];
     if (loaded > 0 && issueSummary.length === 0) {
@@ -3151,6 +3290,7 @@ class BullfrogDrums {
       this.activeVoiceIndex = 0;
       this.selectedTrackIndex = 0;
       this.selectedSlotIndex = this.voiceActiveSlots[0] || 0;
+      this.normalizeVoiceSlotsToLoadedSamples();
 
       this.updateSampleReadyLed();
       this.syncToneControlsForSelectedTrack();
