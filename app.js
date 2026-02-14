@@ -1512,22 +1512,47 @@ class BullfrogDrums {
     this.randomizeVoiceSlotsFromLoaded();
 
     for (let trackIndex = 0; trackIndex < TRACKS.length; trackIndex += 1) {
-      const level = this.randomRange(0.62, 0.96);
+      const levelRange = trackIndex === 4 ? [0.48, 0.82] : [0.62, 0.96];
+      const level = this.randomRange(levelRange[0], levelRange[1]);
       this.setKnobValue(`level-${trackIndex}`, level, { silent: true });
     }
 
-    const toneRanges = {
+    const baseToneRanges = {
       pitch: [-4, 4],
       decay: [0.12, 0.82],
-      loopPoint: [0, 0.36],
-      cutoff: [1800, 13600],
+      loopPoint: [0, 0.2],
+      cutoff: [900, 12500],
       resonance: [0.7, 4.4],
       drive: [0.02, 0.24],
       pan: [-0.35, 0.35]
     };
 
+    const perTrackOverrides = {
+      0: {
+        pitch: [-2.5, 2],
+        decay: [0.14, 0.55],
+        loopPoint: [0, 0.08],
+        cutoff: [1400, 9800],
+        resonance: [0.8, 3.2],
+        drive: [0.03, 0.22],
+        pan: [0, 0]
+      },
+      4: {
+        decay: [0.65, 1.55],
+        loopPoint: [0, 0.18],
+        cutoff: [500, 9000],
+        resonance: [0.9, 5.4],
+        drive: [0.01, 0.2],
+        pan: [-0.28, 0.28]
+      }
+    };
+
     for (let trackIndex = 0; trackIndex < TRACKS.length; trackIndex += 1) {
-      Object.entries(toneRanges).forEach(([id, [min, max]]) => {
+      const trackRanges = {
+        ...baseToneRanges,
+        ...(perTrackOverrides[trackIndex] || {})
+      };
+      Object.entries(trackRanges).forEach(([id, [min, max]]) => {
         const def = CONTROL_DEFS.find((item) => item.id === id);
         if (!def) {
           return;
