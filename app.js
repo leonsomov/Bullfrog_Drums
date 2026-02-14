@@ -438,11 +438,7 @@ class BullfrogDrums {
       } else if (this.dataMode === "end") {
         this.setSequenceEnd(slotValue);
       } else if (this.dataMode === "kit") {
-        this.voiceActiveSlots = this.voiceActiveSlots.map(() => cappedSlot);
-        this.selectedSlotIndex = cappedSlot;
-        for (let voiceIndex = 0; voiceIndex < TRACKS.length; voiceIndex += 1) {
-          this.prepareSampleForPlayback(voiceIndex, cappedSlot);
-        }
+        this.setKitSlotForAllVoices(cappedSlot);
       } else if (this.dataMode === "pattern") {
         this.setPatternBank(slotValue - 1);
       } else if (this.dataMode === "odds") {
@@ -514,6 +510,16 @@ class BullfrogDrums {
 
   normalizePlaybackSlot(slot) {
     return this.clamp(Math.round(Number(slot) || 0), 0, GEEKY_TARGET_PER_VOICE - 1);
+  }
+
+  setKitSlotForAllVoices(slot) {
+    const normalized = this.normalizePlaybackSlot(slot);
+    for (let voiceIndex = 0; voiceIndex < TRACKS.length; voiceIndex += 1) {
+      this.voiceActiveSlots[voiceIndex] = normalized;
+      this.prepareSampleForPlayback(voiceIndex, normalized);
+    }
+    this.selectedSlotIndex = normalized;
+    this.activeVoiceIndex = this.selectedTrackIndex;
   }
 
   syncToneControlsForSelectedTrack() {
