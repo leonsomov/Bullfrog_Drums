@@ -381,28 +381,40 @@ body {
   filter: grayscale(1) brightness(0.18);
   cursor: pointer;
   transition: transform 120ms ease, filter 120ms ease;
+  animation: geeky-lfo 7.2s ease-in-out infinite;
 }
 
 .geeky-logo-wrap {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-}
-
-.geeky-logo-hint {
-  font-family: "Oswald", sans-serif;
-  font-size: 0.7rem;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: #2b3036;
-  white-space: nowrap;
-  opacity: 0.9;
+  width: 100%;
+  display: grid;
+  justify-items: center;
 }
 
 .geeky-logo-compact:hover {
   transform: translateY(-1px);
   filter: grayscale(1) brightness(0.14);
+  animation-play-state: paused;
+}
+
+@keyframes geeky-lfo {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  20% {
+    transform: translate3d(-0.8px, 0.4px, 0) rotate(-0.45deg);
+  }
+  40% {
+    transform: translate3d(0.9px, -0.3px, 0) rotate(0.42deg);
+  }
+  60% {
+    transform: translate3d(-0.6px, -0.5px, 0) rotate(-0.3deg);
+  }
+  80% {
+    transform: translate3d(0.7px, 0.2px, 0) rotate(0.33deg);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
 }
 
 .master-knobs {
