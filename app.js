@@ -1244,11 +1244,52 @@ class BullfrogDrums {
     card.addEventListener("touchcancel", releaseDisplayTouch, { passive: false });
   }
 
+  bindAdaptiveLayout() {
+    const apply = () => this.applyAdaptiveLayout();
+    apply();
+    window.addEventListener("resize", apply);
+    window.addEventListener("pageshow", apply);
+    window.addEventListener("orientationchange", () => {
+      window.setTimeout(apply, 120);
+    });
+  }
+
+  applyAdaptiveLayout() {
+    if (!this.sceneEl || !this.machineEl) {
+      return;
+    }
+
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1200;
+    const mobile = viewportWidth <= 1180;
+    if (!mobile) {
+      this.machineEl.style.transform = "";
+      this.machineEl.style.transformOrigin = "";
+      this.machineEl.style.width = "";
+      this.machineEl.style.minWidth = "";
+      this.sceneEl.style.minHeight = "";
+      return;
+    }
+
+    const desktopWidth = 1800;
+    const safeWidth = Math.max(320, viewportWidth - 10);
+    const scale = this.clamp(safeWidth / desktopWidth, 0.42, 1);
+
+    this.machineEl.style.width = `${desktopWidth}px`;
+    this.machineEl.style.minWidth = `${desktopWidth}px`;
+    this.machineEl.style.transformOrigin = "top center";
+    this.machineEl.style.transform = `scale(${scale})`;
+
+    const rawHeight = this.machineEl.scrollHeight;
+    this.sceneEl.style.minHeight = `${Math.ceil(rawHeight * scale + 12)}px`;
+  }
+
   beginDragLock() {
     this.dragLockCount += 1;
     if (this.dragLockCount !== 1) {
       return;
     }
+    this.lockedScrollY = window.scrollY || window.pageYOffset || 0;
+    document.body.style.top = `-${this.lockedScrollY}px`;
     document.body.classList.add("drag-lock");
     document.documentElement.classList.add("drag-lock");
   }
@@ -1260,6 +1301,8 @@ class BullfrogDrums {
     }
     document.body.classList.remove("drag-lock");
     document.documentElement.classList.remove("drag-lock");
+    document.body.style.top = "";
+    window.scrollTo(0, this.lockedScrollY || 0);
   }
 
   getDisplayEditConfig() {
