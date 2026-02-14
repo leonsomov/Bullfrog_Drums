@@ -147,6 +147,7 @@ class BullfrogDrums {
     this.uiTimeouts = [];
     this.samplePreviewTimeout = null;
     this.stepAutomation = Array.from({ length: SEQ_STEPS }, () => ({}));
+    this.dragLockCount = 0;
 
     this.audioCtx = null;
     this.masterInput = null;
@@ -284,6 +285,7 @@ class BullfrogDrums {
     cap.type = "button";
     cap.className = `knob-cap ${def.theme || ""}`.trim();
     cap.setAttribute("aria-label", def.label);
+    cap.style.touchAction = "none";
 
     const marker = document.createElement("span");
     marker.className = "marker";
@@ -319,9 +321,11 @@ class BullfrogDrums {
       const pointerId = event.pointerId;
       const startY = event.clientY;
       const startVal = knob.value;
+      this.beginDragLock();
       cap.setPointerCapture(pointerId);
 
       const onMove = (moveEvent) => {
+        moveEvent.preventDefault();
         const delta = startY - moveEvent.clientY;
         const range = def.max - def.min;
         const dragScale = def.id === "tempo" ? 700 : 520;
@@ -333,12 +337,45 @@ class BullfrogDrums {
         cap.removeEventListener("pointermove", onMove);
         cap.removeEventListener("pointerup", onUp);
         cap.removeEventListener("pointercancel", onUp);
+        this.endDragLock();
       };
 
       cap.addEventListener("pointermove", onMove);
       cap.addEventListener("pointerup", onUp);
       cap.addEventListener("pointercancel", onUp);
     });
+
+    // iOS fallback: ensure knob drag works inside scrollable page.
+    let touchStartY = 0;
+    let touchStartVal = knob.value;
+    const onTouchStart = (event) => {
+      if (!event.touches || event.touches.length !== 1) {
+        return;
+      }
+      event.preventDefault();
+      touchStartY = event.touches[0].clientY;
+      touchStartVal = knob.value;
+      this.beginDragLock();
+    };
+    const onTouchMove = (event) => {
+      if (!event.touches || event.touches.length !== 1) {
+        return;
+      }
+      event.preventDefault();
+      const delta = touchStartY - event.touches[0].clientY;
+      const range = def.max - def.min;
+      const dragScale = def.id === "tempo" ? 700 : 520;
+      const nextVal = touchStartVal + (delta * range) / dragScale;
+      this.setKnobValue(def.id, nextVal);
+    };
+    const onTouchEnd = (event) => {
+      event.preventDefault();
+      this.endDragLock();
+    };
+    cap.addEventListener("touchstart", onTouchStart, { passive: false });
+    cap.addEventListener("touchmove", onTouchMove, { passive: false });
+    cap.addEventListener("touchend", onTouchEnd, { passive: false });
+    cap.addEventListener("touchcancel", onTouchEnd, { passive: false });
 
     cap.addEventListener(
       "wheel",
@@ -1131,6 +1168,7 @@ class BullfrogDrums {
         return;
       }
       event.preventDefault();
+      this.beginDragLock();
 
       const config = this.getDisplayEditConfig();
       const pointerId = event.pointerId;
@@ -1139,6 +1177,7 @@ class BullfrogDrums {
       card.setPointerCapture(pointerId);
 
       const onMove = (moveEvent) => {
+        moveEvent.preventDefault();
         const delta = startY - moveEvent.clientY;
         const raw = startValue + delta / config.pixelsPerStep;
         const snapped = this.snap(this.clamp(raw, config.min, config.max), config.step);
@@ -1149,6 +1188,7 @@ class BullfrogDrums {
         card.removeEventListener("pointermove", onMove);
         card.removeEventListener("pointerup", onUp);
         card.removeEventListener("pointercancel", onUp);
+        this.endDragLock();
       };
 
       card.addEventListener("pointermove", onMove);
@@ -1160,6 +1200,62 @@ class BullfrogDrums {
       const config = this.getDisplayEditConfig();
       this.openInlineDisplayInput(card, config.getValue(), config);
     });
+
+    let touchStartY = 0;
+    let touchStartValue = 0;
+    card.addEventListener(
+      "touchstart",
+      (event) => {
+        if (!event.touches || event.touches.length !== 1) {
+          return;
+        }
+        event.preventDefault();
+        const config = this.getDisplayEditConfig();
+        touchStartY = event.touches[0].clientY;
+        touchStartValue = config.getValue();
+        this.beginDragLock();
+      },
+      { passive: false }
+    );
+    card.addEventListener(
+      "touchmove",
+      (event) => {
+        if (!event.touches || event.touches.length !== 1) {
+          return;
+        }
+        event.preventDefault();
+        const config = this.getDisplayEditConfig();
+        const delta = touchStartY - event.touches[0].clientY;
+        const raw = touchStartValue + delta / config.pixelsPerStep;
+        const snapped = this.snap(this.clamp(raw, config.min, config.max), config.step);
+        config.onCommit(snapped);
+      },
+      { passive: false }
+    );
+    const releaseDisplayTouch = (event) => {
+      event.preventDefault();
+      this.endDragLock();
+    };
+    card.addEventListener("touchend", releaseDisplayTouch, { passive: false });
+    card.addEventListener("touchcancel", releaseDisplayTouch, { passive: false });
+  }
+
+  beginDragLock() {
+    this.dragLockCount += 1;
+    if (this.dragLockCount !== 1) {
+      return;
+    }
+    document.body.classList.add("drag-lock");
+    document.documentElement.classList.add("drag-lock");
+  }
+
+  endDragLock() {
+    this.dragLockCount = Math.max(0, this.dragLockCount - 1);
+    if (this.dragLockCount > 0) {
+      return;
+    }
+    document.body.classList.remove("drag-lock");
+    document.documentElement.classList.remove("drag-lock");
   }
 
   getDisplayEditConfig() {
