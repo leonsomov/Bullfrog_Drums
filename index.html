@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bullfrog Drums - Web</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700&family=Oswald:wght@400;500;700&family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="scene">
+      <section class="machine">
+        <header class="top-grid">
+          <div class="brand-panel panel">
+            <div class="brand-head">
+              <img class="bullfrog-left-logo" src="assets/bullfrog-drums-logo.svg" alt="Bullfrog Drums" />
+              <div class="honey-grid" aria-hidden="true"></div>
+              <div class="display main-display">
+                <span id="bpmDisplay">120</span>
+                <small id="displayLabel">BPM</small>
+                <span id="stepDisplay" hidden>16</span>
+              </div>
+            </div>
+
+            <div class="sample-line">
+              <span>Sample</span>
+              <div class="status-dot" id="sampleReady"></div>
+              <span>MIC</span>
+              <button class="source-pill" id="sourceMode" type="button">LINE</button>
+            </div>
+
+            <div class="left-controls">
+              <div class="transport-wrap">
+                <button class="transport-btn" id="playPauseBtn" data-action="play" type="button">
+                  Play/Pause
+                </button>
+                <button class="transport-btn" id="stopBtn" data-action="stop" type="button">Stop</button>
+                <button class="transport-btn" id="recBtn" data-action="record" type="button">Rec</button>
+              </div>
+              <div class="data-host-wrap">
+                <div class="master-knobs data-host" id="masterDataKnob"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="control-panel panel">
+            <div class="knob-row" id="levelKnobs"></div>
+            <div class="knob-row tone-row" id="toneKnobs"></div>
+          </div>
+
+          <div class="master-panel panel">
+            <div class="honey-grid master-honey" aria-hidden="true"></div>
+            <img class="geeky-logo-compact" id="geekyLogoAction" src="assets/geeky-punks-logo.svg" alt="Geeky Punks" />
+            <div class="master-knobs volume-host" id="masterVolumeKnob"></div>
+          </div>
+        </header>
+
+        <section class="mode-strip panel">
+          <div class="mode-group" style="--cols: 5">
+            <button class="mode-btn" type="button">Shift</button>
+            <button class="mode-btn" id="clearPatternBtn" type="button">Clear</button>
+            <button class="mode-btn" id="modeLastStepBtn" type="button">Last Step</button>
+            <button class="mode-btn" id="shuffleBtn" type="button">Shuffle</button>
+            <button class="mode-btn" id="modeMuteBtn" type="button">Mute</button>
+          </div>
+          <div class="mode-group" style="--cols: 6">
+            <button class="mode-btn" id="modeTrackBtn" type="button">Track/Tap</button>
+            <button class="mode-btn" id="modePatternBtn" type="button">Patt</button>
+            <button class="mode-btn" id="modeKitBtn" type="button">Kit</button>
+            <button class="mode-btn" id="modeSampleBtn" type="button">Sample</button>
+            <button class="mode-btn" id="modeStartBtn" type="button">Start</button>
+            <button class="mode-btn" id="modeEndBtn" type="button">End</button>
+          </div>
+          <div class="mode-group" style="--cols: 5">
+            <button class="mode-btn" id="reverseBtn" type="button">Reverse</button>
+            <button class="mode-btn" id="modeLoopBtn" type="button">Loop</button>
+            <button class="mode-btn" id="modeAccentBtn" type="button">Accent</button>
+            <button class="mode-btn" id="modeRatchetBtn" type="button">Ratchet</button>
+            <button class="mode-btn" id="modeOddsBtn" type="button">Odds/Prob</button>
+          </div>
+          <div class="mode-group" style="--cols: 4">
+            <button class="mode-btn active-lite bar-btn" data-bar="1" type="button">Bar 1</button>
+            <button class="mode-btn bar-btn" data-bar="2" type="button">Bar 2</button>
+            <button class="mode-btn bar-btn" data-bar="3" type="button">Bar 3</button>
+            <button class="mode-btn bar-btn" data-bar="4" type="button">Bar 4</button>
+          </div>
+        </section>
+
+        <section class="sequencer panel">
+          <div class="grid-head" id="gridHead"></div>
+          <div class="grid-body" id="sequencerGrid"></div>
+        </section>
+      </section>
+
+      <section class="factory-panel panel">
+        <div class="factory-head">
+          <h2>Geeky Punks sample Pack</h2>
+          <div class="factory-actions">
+            <button id="importPackBtn" type="button">Import A-G Folder</button>
+            <button id="validatePackBtn" type="button">Validate Spec</button>
+            <button id="saveKitBtn" type="button">Save Kit JSON</button>
+            <button id="loadKitBtn" type="button">Load Kit JSON</button>
+          </div>
+          <input type="file" id="packFolderInput" webkitdirectory directory multiple hidden />
+          <input type="file" id="kitLoader" accept=".json,application/json" hidden />
+        </div>
+
+        <div class="voice-tabs" id="voiceTabs"></div>
+
+        <div class="voice-meta">
+          <p id="voiceDescription">A - kick drum</p>
+          <p id="selectedSlotInfo">Selected slot 00 | Playback slot 00</p>
+          <p id="voiceCounts">Factory 0/20 | User 0/44</p>
+        </div>
+
+        <div class="slot-grid" id="slotGrid"></div>
+
+        <div class="slot-actions">
+          <button id="loadSlotBtn" type="button">Load Sample To Selected Slot</button>
+          <button id="assignSlotBtn" type="button">Assign Slot To Voice</button>
+          <button id="auditionSlotBtn" type="button">Audition Slot</button>
+          <button id="clearSlotBtn" type="button">Clear Slot</button>
+          <input type="file" id="slotFileInput" accept=".wav,audio/wav" hidden />
+        </div>
+
+        <p class="status-line" id="statusLine">
+          Spec: samples must be mono WAV, 48kHz, 16-bit. Slot naming uses numeric file names (0.wav, 1.wav...).
+        </p>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

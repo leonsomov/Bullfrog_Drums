@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 300">
+  <defs>
+    <clipPath id="right-half">
+      <rect x="160" y="0" width="160" height="180" />
+    </clipPath>
+  </defs>
+
+  <circle cx="160" cy="92" r="84" fill="#8f93a6" />
+  <circle cx="160" cy="92" r="84" fill="#1f232d" clip-path="url(#right-half)" />
+
+  <g fill="#f3f5f9" font-family="'Baloo 2', 'Trebuchet MS', sans-serif" font-weight="700">
+    <text x="82" y="84" font-size="62">bull</text>
+    <text x="76" y="142" font-size="62">frog</text>
+  </g>
+
+  <g transform="translate(195 131)" stroke="#c9ceda" stroke-width="2.2" stroke-linecap="round">
+    <circle r="8.5" fill="none" />
+    <line x1="-12" y1="0" x2="-9" y2="0" />
+    <line x1="12" y1="0" x2="9" y2="0" />
+    <line x1="0" y1="-12" x2="0" y2="-9" />
+    <line x1="0" y1="12" x2="0" y2="9" />
+    <line x1="-9" y1="-9" x2="-7" y2="-7" />
+    <line x1="9" y1="9" x2="7" y2="7" />
+    <line x1="-9" y1="9" x2="-7" y2="7" />
+    <line x1="9" y1="-9" x2="7" y2="-7" />
+  </g>
+
+  <text x="84" y="248" fill="#83899a" font-family="'Oswald', 'Arial Narrow', sans-serif" font-size="58" letter-spacing="1.8">
+    DRUMS
+  </text>
+</svg>
