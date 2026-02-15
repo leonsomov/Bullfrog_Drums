@@ -22,7 +22,7 @@ const CONTROL_DEFS = [
     id: "decay",
     label: "Decay",
     min: 0.05,
-    max: 1.6,
+    max: 4.8,
     step: 0.01,
     value: 0.36,
     theme: "theme-red",
@@ -1637,7 +1637,7 @@ class BullfrogDrums {
         pan: [0, 0]
       },
       4: {
-        decay: [1.02, 1.6],
+        decay: [2.2, 4.6],
         loopPoint: [0.06, 0.62],
         cutoff: [700, 7800],
         resonance: [0.8, 3.8],
@@ -2402,7 +2402,7 @@ class BullfrogDrums {
         source = this.audioCtx.createMediaElementSource(audio);
         amp = this.audioCtx.createGain();
         const now = this.audioCtx.currentTime;
-        const decay = Math.max(0.04, tone.decay);
+        const decay = this.getEffectiveDecay(trackIndex, tone.decay);
         const peak = Math.max(0.0001, this.clamp(level, 0, 1));
         amp.gain.setValueAtTime(0.0001, now);
         amp.gain.linearRampToValueAtTime(peak, now + 0.002);
@@ -2457,7 +2457,7 @@ class BullfrogDrums {
     source.playbackRate.value = Math.pow(2, tone.pitch / 12);
 
     const amp = this.audioCtx.createGain();
-    const decay = Math.max(0.04, tone.decay);
+    const decay = this.getEffectiveDecay(trackIndex, tone.decay);
     const peak = Math.max(0.0001, level);
     amp.gain.setValueAtTime(0.0001, time);
     amp.gain.linearRampToValueAtTime(peak, time + 0.0016);
@@ -2473,7 +2473,7 @@ class BullfrogDrums {
     const zeroCrossStartSample = this.findNearestZeroCrossing(buffer, rawStartSample, 1536);
     const startAt = zeroCrossStartSample / sampleRate;
     const maxDuration = Math.max(0.003, safeDuration - startAt);
-    const duration = Math.min(Math.max(decay * 2, 0.05), maxDuration);
+    const duration = Math.min(Math.max(decay * 2.4, 0.05), maxDuration);
 
     source.start(time, Math.max(0, startAt), duration);
     source.stop(time + duration + 0.02);
@@ -2503,6 +2503,14 @@ class BullfrogDrums {
     }
     node.connect(input);
     return [input];
+  }
+
+  getEffectiveDecay(trackIndex, rawDecay) {
+    const base = Math.max(0.04, Number(rawDecay) || 0.04);
+    if (trackIndex === 4) {
+      return this.clamp(base * 1.8, 0.2, 8);
+    }
+    return base;
   }
 
   findNearestZeroCrossing(buffer, centerSample, searchRadius = 1024) {
