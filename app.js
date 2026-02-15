@@ -655,7 +655,7 @@ class BullfrogDrums {
     }
 
     const now = this.audioCtx.currentTime;
-    this.masterGain.gain.setTargetAtTime(this.controls.volume * 0.92, now, 0.01);
+    this.masterGain.gain.setTargetAtTime(this.controls.volume * 0.8, now, 0.01);
     this.masterFilter.frequency.setTargetAtTime(18000, now, 0.01);
     this.masterFilter.Q.setTargetAtTime(0.707, now, 0.01);
     this.setPanValue(this.masterPan, 0, now, 0.01);
@@ -1993,7 +1993,7 @@ class BullfrogDrums {
       }
       const repeats = Math.max(1, this.ratchetRepeats);
       const spacing = secPerStep / repeats;
-      const accentScale = step % 4 === 0 ? 1 + this.accentAmount * 0.5 : 1;
+      const accentScale = step % 4 === 0 ? 1 + this.accentAmount * 0.35 : 1;
       const repeatCompensation = 1 / Math.sqrt(repeats);
       for (let repeat = 0; repeat < repeats; repeat += 1) {
         this.triggerTrack(track, time + repeat * spacing, { levelScale: accentScale * repeatCompensation });
@@ -2036,7 +2036,7 @@ class BullfrogDrums {
   buildAudioGraph() {
     this.masterInput = this.audioCtx.createGain();
     this.masterHeadroom = this.audioCtx.createGain();
-    this.masterHeadroom.gain.value = 0.66;
+    this.masterHeadroom.gain.value = 0.5;
     this.masterFilter = this.audioCtx.createBiquadFilter();
     this.masterFilter.type = "lowpass";
     this.masterFilter.frequency.value = 18000;
@@ -2046,13 +2046,13 @@ class BullfrogDrums {
     this.masterPan = this.createPanNode(0);
     this.masterSoftClip = this.audioCtx.createWaveShaper();
     this.masterSoftClip.oversample = "4x";
-    this.masterSoftClip.curve = this.makeSoftClipCurve(1);
+    this.masterSoftClip.curve = this.makeSoftClipCurve(0.45);
     this.masterLimiter = this.audioCtx.createDynamicsCompressor();
-    this.masterLimiter.threshold.value = -9;
-    this.masterLimiter.knee.value = 12;
-    this.masterLimiter.ratio.value = 3.2;
-    this.masterLimiter.attack.value = 0.004;
-    this.masterLimiter.release.value = 0.11;
+    this.masterLimiter.threshold.value = -12;
+    this.masterLimiter.knee.value = 10;
+    this.masterLimiter.ratio.value = 2.5;
+    this.masterLimiter.attack.value = 0.005;
+    this.masterLimiter.release.value = 0.12;
     this.masterGain = this.audioCtx.createGain();
     this.masterDrive.curve = this.makeDriveCurve(0);
 
@@ -2074,6 +2074,7 @@ class BullfrogDrums {
     this.trackPans = [];
     for (let trackIndex = 0; trackIndex < TRACKS.length; trackIndex += 1) {
       const input = this.audioCtx.createGain();
+      input.gain.value = 0.78;
       const preDrive = this.audioCtx.createWaveShaper();
       preDrive.oversample = "4x";
       preDrive.curve = this.makeDriveCurve(0.14);
@@ -2135,9 +2136,11 @@ class BullfrogDrums {
     const ladderCutoff = this.mapCutoffToLadderFrequency(tone.cutoff);
     const q = this.mapResonanceToLadderQ(tone.resonance);
     const resonanceNorm = this.clamp((q - 0.45) / 22, 0, 1);
-    const preDriveAmount = this.clamp(0.13 + resonanceNorm * 0.58 + tone.drive * 0.34, 0, 1);
+    const driveNorm = this.clamp(tone.drive, 0, 1);
+    const musicalDrive = Math.pow(driveNorm, 1.8);
+    const preDriveAmount = this.clamp(0.02 + resonanceNorm * 0.12 + musicalDrive * 0.28, 0, 0.42);
     preDrive.curve = this.makeDriveCurve(preDriveAmount);
-    drive.curve = this.makeDriveCurve(this.clamp(tone.drive * 0.92 + resonanceNorm * 0.08, 0, 1));
+    drive.curve = this.makeDriveCurve(this.clamp(musicalDrive * 0.35 + resonanceNorm * 0.02, 0, 0.4));
 
     const cutoffMultipliers = [1.3, 1.08, 0.9, 0.72];
     const qWeights = [0.18, 0.3, 0.52, 0.84];
@@ -2150,7 +2153,7 @@ class BullfrogDrums {
 
     resonancePeak.frequency.setTargetAtTime(this.clamp(ladderCutoff * 0.92, 45, 15000), now, 0.01);
     resonancePeak.Q.setTargetAtTime(this.clamp(0.7 + q * 0.62, 0.5, 28), now, 0.01);
-    resonancePeak.gain.setTargetAtTime(-1 + resonanceNorm * 18, now, 0.01);
+    resonancePeak.gain.setTargetAtTime(-2 + resonanceNorm * 9, now, 0.01);
 
     this.setPanValue(pan, this.clamp(tone.pan, -1, 1), now, 0.01);
   }
@@ -2198,7 +2201,7 @@ class BullfrogDrums {
 
   triggerTrack(trackIndex, time, options = {}) {
     const { allowHtmlFallback = false, levelScale = 1 } = options;
-    const level = this.clamp(this.trackLevels[trackIndex] * levelScale, 0, 0.88);
+    const level = this.clamp(this.trackLevels[trackIndex] * levelScale, 0, 0.72);
     if (level <= 0.001) {
       return;
     }
@@ -2783,21 +2786,38 @@ class BullfrogDrums {
   }
 
   makeDriveCurve(amount) {
-    const k = amount * 120;
-    const samples = 256;
+    const drive = this.clamp(Number(amount) || 0, 0, 1);
+    const samples = 2048;
     const curve = new Float32Array(samples);
 
-    if (k <= 0.001) {
+    if (drive <= 0.001) {
       for (let i = 0; i < samples; i += 1) {
         curve[i] = (i * 2) / (samples - 1) - 1;
       }
       return curve;
     }
 
+    const intensity = 1 + drive * 4.2;
+    const asymmetry = 0.08 * drive;
+    const wet = 0.6 + drive * 0.28;
+    const dry = 1 - wet;
+    const norm = Math.tanh(intensity * (1 + asymmetry));
+
     for (let i = 0; i < samples; i += 1) {
       const x = (i * 2) / (samples - 1) - 1;
-      curve[i] = ((1 + k) * x) / (1 + k * Math.abs(x));
+      const asymmetricX = x + asymmetry * x * x * Math.sign(x);
+      const saturated = Math.tanh(asymmetricX * intensity) / norm;
+      const blended = dry * x + wet * saturated;
+      curve[i] = this.clamp(blended * (1 - drive * 0.14), -1, 1);
     }
+
+    // Slight smoothing reduces brittle digital edge at higher drive values.
+    for (let pass = 0; pass < 2; pass += 1) {
+      for (let i = 1; i < samples; i += 1) {
+        curve[i] = curve[i - 1] * 0.12 + curve[i] * 0.88;
+      }
+    }
+
     return curve;
   }
 
