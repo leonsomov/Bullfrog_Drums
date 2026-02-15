@@ -13,7 +13,7 @@ Important:
 - Click the GeekyPunks logo to randomize patterns and kit behavior.
 - Or simply refresh the page to get a fresh randomized result.
 - Hover the right speaker to darken it (save-ready state).
-- Click the right speaker to export the current full 4-bar loop as a stereo WAV file.
+- Click the right speaker to export a 16-bar stereo WAV (starts from Bar 1, no extra second-loop tail).
 
 This version is still in the making, so minor bugs may happen.
 

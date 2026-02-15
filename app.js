@@ -182,6 +182,11 @@ class BullfrogDrums {
     this.speakerExportProgressEl = null;
     this.isExportingLoop = false;
     this.exportProgressTimer = null;
+    this.exportStepLimitActive = false;
+    this.exportStepsRemaining = 0;
+    this.exportStepBoundaryTimer = null;
+    this.exportStepLimitResolver = null;
+    this.exportBarsTotal = 16;
 
     this.readDom();
     this.buildPatternDefaults();
@@ -1310,7 +1315,7 @@ class BullfrogDrums {
     if (this.masterSpeakerEl) {
       this.masterSpeakerEl.setAttribute("role", "button");
       this.masterSpeakerEl.setAttribute("tabindex", "0");
-      this.masterSpeakerEl.setAttribute("aria-label", "Export current 4-bar loop as stereo WAV");
+      this.masterSpeakerEl.setAttribute("aria-label", "Export current 16-bar loop as stereo WAV");
       this.masterSpeakerEl.addEventListener("click", async () => {
         await this.exportFourBarLoopWav();
       });
@@ -1352,7 +1357,7 @@ class BullfrogDrums {
     if (this.masterSpeakerEl) {
       this.masterSpeakerEl.classList.add("is-exporting");
     }
-    this.setStatus("Preparing exact 4-bar WAV export...", "ok");
+    this.setStatus("Preparing exact 16-bar WAV export from Bar 1...", "ok");
 
     try {
       await this.ensureAudioReady();
@@ -1364,12 +1369,12 @@ class BullfrogDrums {
       const wavBlob = await this.captureExactFourBarLoopWav();
       this.setExportProgress(0.95, { active: true });
       const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const filename = `bullfrog-drums-4bar-${Math.round(this.controls.tempo)}bpm-${stamp}.wav`;
+      const filename = `bullfrog-drums-16bar-${Math.round(this.controls.tempo)}bpm-${stamp}.wav`;
       this.downloadBlob(wavBlob, filename);
       this.setExportProgress(1, { active: true, done: true });
       this.setStatus(`Saved stereo WAV: ${filename}`, "ok");
     } catch (_error) {
-      this.setStatus("Could not render/export the 4-bar WAV.", "warn");
+      this.setStatus("Could not render/export the 16-bar WAV.", "warn");
       this.setExportProgress(0, { active: false, done: false });
     } finally {
       this.stopExportProgressDrift();
@@ -1427,6 +1432,26 @@ class BullfrogDrums {
     }
   }
 
+  beginExportStepLimit(totalSteps) {
+    this.clearExportStepLimit();
+    const steps = Math.max(1, Math.round(totalSteps));
+    this.exportStepLimitActive = true;
+    this.exportStepsRemaining = steps;
+    return new Promise((resolve) => {
+      this.exportStepLimitResolver = resolve;
+    });
+  }
+
+  clearExportStepLimit() {
+    this.exportStepLimitActive = false;
+    this.exportStepsRemaining = 0;
+    if (this.exportStepBoundaryTimer) {
+      clearTimeout(this.exportStepBoundaryTimer);
+      this.exportStepBoundaryTimer = null;
+    }
+    this.exportStepLimitResolver = null;
+  }
+
   getSupportedRecorderMimeType() {
     if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
       return "";
@@ -1441,20 +1466,25 @@ class BullfrogDrums {
     return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || "";
   }
 
-  estimateFourBarCaptureSeconds() {
+  estimateCaptureSeconds(totalBars = this.exportBarsTotal) {
+    const bars = Math.max(1, Math.round(totalBars));
     const secPerStep = 60 / this.controls.tempo / 4;
     const swing = this.shuffleOn ? secPerStep * 0.12 : 0;
     const oneBar = secPerStep * SEQ_STEPS + swing * Math.floor(SEQ_STEPS / 2);
-    return oneBar * 4;
+    return oneBar * bars;
   }
 
   async captureExactFourBarLoopWav() {
+    const exportBars = Math.max(1, Math.round(this.exportBarsTotal || 16));
+    const exportSteps = SEQ_STEPS * exportBars;
+    const captureSeconds = this.estimateCaptureSeconds(exportBars);
+
     const canRealtimeRecord =
       typeof MediaRecorder !== "undefined" &&
       Boolean(this.exportTapNode?.stream) &&
       this.exportTapNode.stream.getAudioTracks().length > 0;
     if (!canRealtimeRecord) {
-      const rendered = await this.renderFourBarLoopOffline();
+      const rendered = await this.renderFourBarLoopOffline(exportBars);
       return this.audioBufferToWavBlob(rendered);
     }
 
@@ -1479,57 +1509,68 @@ class BullfrogDrums {
       );
     });
 
-    const startedForExport = !this.isPlaying;
+    const wasPlaying = this.isPlaying;
     const originalBank = this.patternBankIndex;
-    const patternSeconds = this.estimateFourBarCaptureSeconds();
-    const tailSeconds = 1.35;
+    const finalTailSeconds = 0.14;
 
-    recorder.start(120);
-    this.startExportProgressDrift(0.5, 0.93, (patternSeconds + tailSeconds) * 1000);
+    try {
+      recorder.start(120);
+      this.startExportProgressDrift(0.5, 0.93, (captureSeconds + finalTailSeconds) * 1000);
 
-    if (startedForExport) {
+      if (wasPlaying) {
+        this.pauseTransport();
+      }
       this.setPatternBank(0);
+      this.currentStep = this.sequenceStart;
+      const donePromise = this.beginExportStepLimit(exportSteps);
       await this.startTransport();
-    }
 
-    await new Promise((resolve) => window.setTimeout(resolve, patternSeconds * 1000));
-    if (startedForExport) {
+      await donePromise;
       this.pauseTransport();
-    }
-    await new Promise((resolve) => window.setTimeout(resolve, tailSeconds * 1000));
+      await new Promise((resolve) => window.setTimeout(resolve, finalTailSeconds * 1000));
 
-    if (recorder.state !== "inactive") {
-      recorder.stop();
-    }
-    await stopPromise;
+      if (recorder.state !== "inactive") {
+        recorder.stop();
+      }
+      await stopPromise;
 
-    if (startedForExport) {
+      const recordedBlob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+      if (recordedBlob.size === 0) {
+        throw new Error("Captured WAV is empty.");
+      }
+
+      try {
+        const encoded = await recordedBlob.arrayBuffer();
+        const decoded = await this.audioCtx.decodeAudioData(encoded.slice(0));
+        return this.audioBufferToWavBlob(decoded);
+      } catch (_decodeError) {
+        const rendered = await this.renderFourBarLoopOffline(exportBars);
+        return this.audioBufferToWavBlob(rendered);
+      }
+    } finally {
+      this.clearExportStepLimit();
+      this.pauseTransport();
       this.stopTransport();
       this.setPatternBank(originalBank);
       this.syncDataKnobToCurrentMode();
-    }
-
-    const recordedBlob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
-    if (recordedBlob.size === 0) {
-      throw new Error("Captured WAV is empty.");
-    }
-
-    try {
-      const encoded = await recordedBlob.arrayBuffer();
-      const decoded = await this.audioCtx.decodeAudioData(encoded.slice(0));
-      return this.audioBufferToWavBlob(decoded);
-    } catch (_decodeError) {
-      const rendered = await this.renderFourBarLoopOffline();
-      return this.audioBufferToWavBlob(rendered);
+      if (recorder.state !== "inactive") {
+        try {
+          recorder.stop();
+          await stopPromise;
+        } catch (_error) {
+          // Ignore recorder shutdown errors during cleanup.
+        }
+      }
     }
   }
 
-  async renderFourBarLoopOffline() {
+  async renderFourBarLoopOffline(totalBars = this.exportBarsTotal) {
+    const bars = Math.max(1, Math.round(totalBars));
     const sampleRate = 48000;
     const secPerStep = 60 / this.controls.tempo / 4;
-    const totalSteps = SEQ_STEPS * 4;
+    const totalSteps = SEQ_STEPS * bars;
     const loopDuration = totalSteps * secPerStep;
-    const tailSeconds = 3.8;
+    const tailSeconds = 2.2;
     const frameCount = Math.ceil((loopDuration + tailSeconds) * sampleRate);
     const offlineCtx = new OfflineAudioContext(2, frameCount, sampleRate);
 
@@ -1574,8 +1615,8 @@ class BullfrogDrums {
 
     const noiseBuffer = this.makeNoiseBufferForContext(offlineCtx);
 
-    for (let barIndex = 0; barIndex < 4; barIndex += 1) {
-      const bankPattern = this.patternBanks[barIndex] || this.patternBanks[0] || this.pattern;
+    for (let barIndex = 0; barIndex < bars; barIndex += 1) {
+      const bankPattern = this.patternBanks[barIndex % 4] || this.patternBanks[0] || this.pattern;
       for (let step = 0; step < SEQ_STEPS; step += 1) {
         const globalStep = barIndex * SEQ_STEPS + step;
         const baseTime = globalStep * secPerStep;
@@ -2705,6 +2746,9 @@ class BullfrogDrums {
     }
 
     while (this.isPlaying && this.nextNoteTime < this.audioCtx.currentTime + this.scheduleAheadSec) {
+      if (this.exportStepLimitActive && this.exportStepsRemaining <= 0) {
+        break;
+      }
       this.scheduleStep(this.currentStep, this.nextNoteTime);
       this.advanceStep();
     }
@@ -2742,6 +2786,25 @@ class BullfrogDrums {
       const repeatCompensation = 1 / Math.sqrt(repeats);
       for (let repeat = 0; repeat < repeats; repeat += 1) {
         this.triggerTrack(track, time + repeat * spacing, { levelScale: accentScale * repeatCompensation });
+      }
+    }
+
+    if (this.exportStepLimitActive) {
+      this.exportStepsRemaining = Math.max(0, this.exportStepsRemaining - 1);
+      if (this.exportStepsRemaining === 0 && this.exportStepLimitResolver) {
+        const swingOffset = this.shuffleOn && step % 2 === 1 ? secPerStep * 0.12 : 0;
+        const stepDuration = Math.max(0.002, secPerStep + swingOffset);
+        const completeAt = time + stepDuration;
+        const waitMs = Math.max(0, (completeAt - this.audioCtx.currentTime) * 1000);
+        const resolve = this.exportStepLimitResolver;
+        this.exportStepLimitResolver = null;
+        if (this.exportStepBoundaryTimer) {
+          clearTimeout(this.exportStepBoundaryTimer);
+        }
+        this.exportStepBoundaryTimer = window.setTimeout(() => {
+          this.exportStepBoundaryTimer = null;
+          resolve();
+        }, waitMs);
       }
     }
   }
