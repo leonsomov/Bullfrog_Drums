@@ -12,14 +12,10 @@ Important:
 
 - Click the GeekyPunks logo to randomize patterns and kit behavior.
 - Or simply refresh the page to get a fresh randomized result.
+- Hover the right speaker to darken it (save-ready state).
+- Click the right speaker to export the current full 4-bar loop as a stereo WAV file.
 
 This version is still in the making, so minor bugs may happen.
-
-### Idea For Next Update
-
-- When you like the groove, hover the right speaker: it should blend to a darker state.
-- Click the right speaker to save/export the full 4-bar loop as a stereo WAV file.
-- Goal: quick capture of random ideas.
 
 ## Run locally
 

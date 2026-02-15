@@ -177,6 +177,11 @@ class BullfrogDrums {
     this.honeyMeterBuffer = null;
     this.honeyMeterFrame = null;
     this.honeyLevels = [0, 0];
+    this.exportTapNode = null;
+    this.masterSpeakerEl = null;
+    this.speakerExportProgressEl = null;
+    this.isExportingLoop = false;
+    this.exportProgressTimer = null;
 
     this.readDom();
     this.buildPatternDefaults();
@@ -257,6 +262,8 @@ class BullfrogDrums {
     this.sourceMode = document.getElementById("sourceMode");
     this.statusLine = document.getElementById("statusLine");
     this.geekyLogoAction = document.getElementById("geekyLogoAction");
+    this.masterSpeakerEl = document.querySelector(".master-honey");
+    this.speakerExportProgressEl = document.getElementById("speakerExportProgress");
     this.honeySpeakerEls = Array.from(document.querySelectorAll(".honey-grid"));
     this.applyHoneyAnalyzerLevels(0, 0);
   }
@@ -1300,6 +1307,22 @@ class BullfrogDrums {
       });
     }
 
+    if (this.masterSpeakerEl) {
+      this.masterSpeakerEl.setAttribute("role", "button");
+      this.masterSpeakerEl.setAttribute("tabindex", "0");
+      this.masterSpeakerEl.setAttribute("aria-label", "Export current 4-bar loop as stereo WAV");
+      this.masterSpeakerEl.addEventListener("click", async () => {
+        await this.exportFourBarLoopWav();
+      });
+      this.masterSpeakerEl.addEventListener("keydown", async (event) => {
+        if (event.key !== "Enter" && event.key !== " ") {
+          return;
+        }
+        event.preventDefault();
+        await this.exportFourBarLoopWav();
+      });
+    }
+
     document.addEventListener("keydown", async (event) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
         return;
@@ -1318,6 +1341,500 @@ class BullfrogDrums {
         this.recBtn.click();
       }
     });
+  }
+
+  async exportFourBarLoopWav() {
+    if (this.isExportingLoop) {
+      return;
+    }
+    this.isExportingLoop = true;
+    this.setExportProgress(0.04, { active: true });
+    if (this.masterSpeakerEl) {
+      this.masterSpeakerEl.classList.add("is-exporting");
+    }
+    this.setStatus("Preparing exact 4-bar WAV export...", "ok");
+
+    try {
+      await this.ensureAudioReady();
+      this.setExportProgress(0.14, { active: true });
+      await this.decodePathBackedSamples();
+      this.setExportProgress(0.3, { active: true });
+      await this.decodeAllSampleBuffers();
+      this.setExportProgress(0.46, { active: true });
+      const wavBlob = await this.captureExactFourBarLoopWav();
+      this.setExportProgress(0.95, { active: true });
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const filename = `bullfrog-drums-4bar-${Math.round(this.controls.tempo)}bpm-${stamp}.wav`;
+      this.downloadBlob(wavBlob, filename);
+      this.setExportProgress(1, { active: true, done: true });
+      this.setStatus(`Saved stereo WAV: ${filename}`, "ok");
+    } catch (_error) {
+      this.setStatus("Could not render/export the 4-bar WAV.", "warn");
+      this.setExportProgress(0, { active: false, done: false });
+    } finally {
+      this.stopExportProgressDrift();
+      this.isExportingLoop = false;
+      if (this.masterSpeakerEl) {
+        this.masterSpeakerEl.classList.remove("is-exporting");
+      }
+      window.setTimeout(() => {
+        if (!this.isExportingLoop) {
+          this.setExportProgress(0, { active: false, done: false });
+        }
+      }, 1200);
+    }
+  }
+
+  setExportProgress(value, options = {}) {
+    const { active = true, done = false } = options;
+    if (!this.speakerExportProgressEl) {
+      return;
+    }
+    const progress = this.clamp(Number(value) || 0, 0, 1);
+    this.speakerExportProgressEl.style.setProperty("--export-progress", progress.toFixed(3));
+    this.speakerExportProgressEl.classList.toggle("active", Boolean(active));
+    this.speakerExportProgressEl.classList.toggle("done", Boolean(done));
+  }
+
+  startExportProgressDrift(start, end, durationMs = 0) {
+    this.stopExportProgressDrift();
+    const safeStart = this.clamp(start, 0, 1);
+    const safeEnd = this.clamp(end, safeStart, 1);
+    this.setExportProgress(safeStart, { active: true });
+
+    if (durationMs > 0) {
+      const startedAt = performance.now();
+      this.exportProgressTimer = window.setInterval(() => {
+        const elapsed = performance.now() - startedAt;
+        const progress = this.clamp(elapsed / durationMs, 0, 1);
+        const mapped = safeStart + (safeEnd - safeStart) * progress;
+        this.setExportProgress(mapped, { active: true });
+      }, 90);
+      return;
+    }
+
+    let current = safeStart;
+    this.exportProgressTimer = window.setInterval(() => {
+      current = Math.min(safeEnd, current + this.randomRange(0.005, 0.03));
+      this.setExportProgress(current, { active: true });
+    }, 120);
+  }
+
+  stopExportProgressDrift() {
+    if (this.exportProgressTimer) {
+      clearInterval(this.exportProgressTimer);
+      this.exportProgressTimer = null;
+    }
+  }
+
+  getSupportedRecorderMimeType() {
+    if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
+      return "";
+    }
+    const candidates = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/mp4",
+      "audio/ogg;codecs=opus",
+      "audio/ogg"
+    ];
+    return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || "";
+  }
+
+  estimateFourBarCaptureSeconds() {
+    const secPerStep = 60 / this.controls.tempo / 4;
+    const swing = this.shuffleOn ? secPerStep * 0.12 : 0;
+    const oneBar = secPerStep * SEQ_STEPS + swing * Math.floor(SEQ_STEPS / 2);
+    return oneBar * 4;
+  }
+
+  async captureExactFourBarLoopWav() {
+    const canRealtimeRecord =
+      typeof MediaRecorder !== "undefined" &&
+      Boolean(this.exportTapNode?.stream) &&
+      this.exportTapNode.stream.getAudioTracks().length > 0;
+    if (!canRealtimeRecord) {
+      const rendered = await this.renderFourBarLoopOffline();
+      return this.audioBufferToWavBlob(rendered);
+    }
+
+    const mimeType = this.getSupportedRecorderMimeType();
+    const recorder = mimeType
+      ? new MediaRecorder(this.exportTapNode.stream, { mimeType })
+      : new MediaRecorder(this.exportTapNode.stream);
+    const chunks = [];
+
+    recorder.addEventListener("dataavailable", (event) => {
+      if (event.data && event.data.size > 0) {
+        chunks.push(event.data);
+      }
+    });
+
+    const stopPromise = new Promise((resolve, reject) => {
+      recorder.addEventListener("stop", () => resolve(), { once: true });
+      recorder.addEventListener(
+        "error",
+        (event) => reject(event?.error || new Error("MediaRecorder error.")),
+        { once: true }
+      );
+    });
+
+    const startedForExport = !this.isPlaying;
+    const originalBank = this.patternBankIndex;
+    const patternSeconds = this.estimateFourBarCaptureSeconds();
+    const tailSeconds = 1.35;
+
+    recorder.start(120);
+    this.startExportProgressDrift(0.5, 0.93, (patternSeconds + tailSeconds) * 1000);
+
+    if (startedForExport) {
+      this.setPatternBank(0);
+      await this.startTransport();
+    }
+
+    await new Promise((resolve) => window.setTimeout(resolve, patternSeconds * 1000));
+    if (startedForExport) {
+      this.pauseTransport();
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, tailSeconds * 1000));
+
+    if (recorder.state !== "inactive") {
+      recorder.stop();
+    }
+    await stopPromise;
+
+    if (startedForExport) {
+      this.stopTransport();
+      this.setPatternBank(originalBank);
+      this.syncDataKnobToCurrentMode();
+    }
+
+    const recordedBlob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+    if (recordedBlob.size === 0) {
+      throw new Error("Captured WAV is empty.");
+    }
+
+    try {
+      const encoded = await recordedBlob.arrayBuffer();
+      const decoded = await this.audioCtx.decodeAudioData(encoded.slice(0));
+      return this.audioBufferToWavBlob(decoded);
+    } catch (_decodeError) {
+      const rendered = await this.renderFourBarLoopOffline();
+      return this.audioBufferToWavBlob(rendered);
+    }
+  }
+
+  async renderFourBarLoopOffline() {
+    const sampleRate = 48000;
+    const secPerStep = 60 / this.controls.tempo / 4;
+    const totalSteps = SEQ_STEPS * 4;
+    const loopDuration = totalSteps * secPerStep;
+    const tailSeconds = 3.8;
+    const frameCount = Math.ceil((loopDuration + tailSeconds) * sampleRate);
+    const offlineCtx = new OfflineAudioContext(2, frameCount, sampleRate);
+
+    const masterInput = offlineCtx.createGain();
+    const masterHeadroom = offlineCtx.createGain();
+    masterHeadroom.gain.value = 0.5;
+    const masterFilter = offlineCtx.createBiquadFilter();
+    masterFilter.type = "lowpass";
+    masterFilter.frequency.value = 18000;
+    masterFilter.Q.value = 0.707;
+    const masterDrive = offlineCtx.createWaveShaper();
+    masterDrive.oversample = "4x";
+    masterDrive.curve = this.makeDriveCurve(0);
+    const masterPan = this.createOfflinePanNode(offlineCtx, 0);
+    const masterSoftClip = offlineCtx.createWaveShaper();
+    masterSoftClip.oversample = "4x";
+    masterSoftClip.curve = this.makeSoftClipCurve(0.45);
+    const masterLimiter = offlineCtx.createDynamicsCompressor();
+    masterLimiter.threshold.value = -12;
+    masterLimiter.knee.value = 10;
+    masterLimiter.ratio.value = 2.5;
+    masterLimiter.attack.value = 0.005;
+    masterLimiter.release.value = 0.12;
+    const masterGain = offlineCtx.createGain();
+    masterGain.gain.value = this.controls.volume * 0.8;
+
+    masterInput.connect(masterHeadroom);
+    masterHeadroom.connect(masterFilter);
+    masterFilter.connect(masterDrive);
+    masterDrive.connect(masterPan);
+    masterPan.connect(masterSoftClip);
+    masterSoftClip.connect(masterLimiter);
+    masterLimiter.connect(masterGain);
+    masterGain.connect(offlineCtx.destination);
+
+    const trackInputs = TRACKS.map(() => {
+      const input = offlineCtx.createGain();
+      input.gain.value = 0.78;
+      input.connect(masterInput);
+      return input;
+    });
+
+    const noiseBuffer = this.makeNoiseBufferForContext(offlineCtx);
+
+    for (let barIndex = 0; barIndex < 4; barIndex += 1) {
+      const bankPattern = this.patternBanks[barIndex] || this.patternBanks[0] || this.pattern;
+      for (let step = 0; step < SEQ_STEPS; step += 1) {
+        const globalStep = barIndex * SEQ_STEPS + step;
+        const baseTime = globalStep * secPerStep;
+        for (let track = 0; track < TRACKS.length; track += 1) {
+          if (this.trackMutes[track]) {
+            continue;
+          }
+          if (!bankPattern?.[track]?.[step]) {
+            continue;
+          }
+          const trackStart = this.trackStartSteps[track] ?? 0;
+          const trackEnd = this.trackEndSteps[track] ?? (SEQ_STEPS - 1);
+          if (step < trackStart || step > trackEnd) {
+            continue;
+          }
+          const stepProbability = this.trackStepProbability[track] ?? this.stepProbability;
+          if (Math.random() > stepProbability) {
+            continue;
+          }
+          const repeats = Math.max(1, this.trackRatchetRepeats[track] ?? this.ratchetRepeats);
+          const spacing = secPerStep / repeats;
+          const accentAmount = this.trackAccentAmounts[track] ?? this.accentAmount;
+          const accentScale = step % 4 === 0 ? 1 + accentAmount * 0.35 : 1;
+          const repeatCompensation = 1 / Math.sqrt(repeats);
+          for (let repeat = 0; repeat < repeats; repeat += 1) {
+            const level = this.clamp(this.trackLevels[track] * accentScale * repeatCompensation, 0, 0.72);
+            if (level <= 0.001) {
+              continue;
+            }
+            const hitTime = baseTime + repeat * spacing;
+            this.scheduleOfflineTrackHit(offlineCtx, trackInputs[track], track, step, hitTime, level, noiseBuffer);
+          }
+        }
+      }
+    }
+
+    return offlineCtx.startRendering();
+  }
+
+  scheduleOfflineTrackHit(offlineCtx, trackInput, trackIndex, step, time, level, noiseBuffer) {
+    const tone = this.getToneForOfflineStep(trackIndex, step);
+    const desiredSlot = this.voiceActiveSlots[trackIndex] ?? 0;
+    const resolvedSlot = this.resolvePlaybackSlotForVoice(trackIndex, desiredSlot, { mutate: false });
+    const sample = this.sampleBanks[trackIndex]?.[resolvedSlot] || null;
+    if (sample?.buffer) {
+      this.scheduleOfflineSampleBuffer(offlineCtx, trackInput, trackIndex, sample.buffer, tone, time, level);
+      return;
+    }
+    this.scheduleOfflineFallbackHit(offlineCtx, trackInput, trackIndex, tone, time, level, noiseBuffer);
+  }
+
+  getToneForOfflineStep(trackIndex, step) {
+    const tone = { ...this.getVoiceTone(trackIndex) };
+    const automation = this.stepAutomation?.[step];
+    if (!automation) {
+      return tone;
+    }
+    TONE_CONTROL_IDS.forEach((id) => {
+      const key = `${id}@${trackIndex}`;
+      const value = automation[key];
+      if (typeof value === "number" && Number.isFinite(value)) {
+        tone[id] = value;
+      }
+    });
+    return tone;
+  }
+
+  scheduleOfflineSampleBuffer(offlineCtx, trackInput, trackIndex, buffer, tone, time, level) {
+    const source = offlineCtx.createBufferSource();
+    source.buffer = buffer;
+    source.playbackRate.value = Math.pow(2, tone.pitch / 12);
+
+    const amp = offlineCtx.createGain();
+    const decay = this.getEffectiveDecay(trackIndex, tone.decay);
+    const peak = Math.max(0.0001, level);
+    amp.gain.setValueAtTime(0.0001, time);
+    amp.gain.linearRampToValueAtTime(peak, time + 0.0016);
+    amp.gain.exponentialRampToValueAtTime(0.0001, time + decay);
+
+    source.connect(amp);
+    this.connectOfflineNodeWithTone(offlineCtx, amp, trackInput, trackIndex, tone);
+
+    const safeDuration = Math.max(0.003, buffer.duration);
+    const rawStart = Math.min(safeDuration - 0.002, safeDuration * tone.loopPoint);
+    const sampleRate = buffer.sampleRate || 48000;
+    const rawStartSample = Math.floor(rawStart * sampleRate);
+    const zeroCrossStartSample = this.findNearestZeroCrossing(buffer, rawStartSample, 1536);
+    const startAt = zeroCrossStartSample / sampleRate;
+    const maxDuration = Math.max(0.003, safeDuration - startAt);
+    const duration = Math.min(Math.max(decay * 2.4, 0.05), maxDuration);
+
+    source.start(time, Math.max(0, startAt), duration);
+    source.stop(time + duration + 0.02);
+  }
+
+  scheduleOfflineFallbackHit(offlineCtx, trackInput, trackIndex, tone, time, level, noiseBuffer) {
+    if (!noiseBuffer) {
+      return;
+    }
+
+    const source = offlineCtx.createBufferSource();
+    source.buffer = noiseBuffer;
+    source.playbackRate.value = Math.pow(2, tone.pitch / 24);
+
+    const hp = offlineCtx.createBiquadFilter();
+    hp.type = "highpass";
+    const lp = offlineCtx.createBiquadFilter();
+    lp.type = "lowpass";
+
+    const profiles = [
+      [30, 1800],
+      [1200, 7000],
+      [320, 4400],
+      [900, 7200],
+      [220, 2600],
+      [4600, 14500],
+      [2400, 12000]
+    ];
+    const [hpFreq, lpFreq] = profiles[trackIndex] || [700, 6500];
+    hp.frequency.value = hpFreq;
+    lp.frequency.value = lpFreq;
+
+    const amp = offlineCtx.createGain();
+    const decay = this.getEffectiveDecay(trackIndex, tone.decay);
+    amp.gain.setValueAtTime(Math.max(0.0001, level * 0.6), time);
+    amp.gain.exponentialRampToValueAtTime(0.0001, time + Math.max(0.05, decay * 0.9));
+
+    source.connect(hp);
+    hp.connect(lp);
+    lp.connect(amp);
+    this.connectOfflineNodeWithTone(offlineCtx, amp, trackInput, trackIndex, tone);
+
+    source.start(time);
+    source.stop(time + Math.max(0.06, decay + 0.04));
+  }
+
+  connectOfflineNodeWithTone(offlineCtx, node, trackInput, trackIndex, tone) {
+    const preDrive = offlineCtx.createWaveShaper();
+    preDrive.oversample = "4x";
+    const filterStages = Array.from({ length: 4 }, () => {
+      const filter = offlineCtx.createBiquadFilter();
+      filter.type = "lowpass";
+      return filter;
+    });
+    const resonancePeak = offlineCtx.createBiquadFilter();
+    resonancePeak.type = "peaking";
+    const drive = offlineCtx.createWaveShaper();
+    drive.oversample = "4x";
+    const pan = this.createOfflinePanNode(offlineCtx, tone.pan);
+
+    const cutoffFloor = this.getTrackCutoffFloor(trackIndex);
+    const ladderCutoff = Math.max(cutoffFloor, this.mapCutoffToLadderFrequency(tone.cutoff));
+    const q = this.mapResonanceToLadderQ(tone.resonance);
+    const resonanceNorm = this.clamp(q / 18, 0, 1);
+    const driveNorm = this.clamp(tone.drive, 0, 1);
+    const musicalDrive = Math.pow(driveNorm, 1.8);
+    const preDriveAmount = this.clamp(0.02 + resonanceNorm * 0.12 + musicalDrive * 0.28, 0, 0.42);
+    preDrive.curve = this.makeDriveCurve(preDriveAmount);
+    drive.curve = this.makeDriveCurve(this.clamp(musicalDrive * 0.35 + resonanceNorm * 0.02, 0, 0.4));
+
+    const cutoffMultipliers = [1.3, 1.08, 0.9, 0.72];
+    const qWeights = [0.18, 0.3, 0.52, 0.84];
+    filterStages.forEach((filter, index) => {
+      const stageMin = Math.max(38, cutoffFloor * 0.72);
+      filter.frequency.value = this.clamp(ladderCutoff * (cutoffMultipliers[index] || 1), stageMin, 18000);
+      filter.Q.value = this.clamp(0.18 + q * (qWeights[index] || 0.25), 0.1, 28);
+    });
+
+    resonancePeak.frequency.value = this.clamp(ladderCutoff * 0.92, Math.max(45, cutoffFloor * 0.7), 15000);
+    resonancePeak.Q.value = this.clamp(0.45 + q * 0.5, 0.3, 24);
+    resonancePeak.gain.value = -8 + resonanceNorm * 14;
+    this.setOfflinePanValue(pan, tone.pan);
+
+    node.connect(preDrive);
+    preDrive.connect(filterStages[0]);
+    filterStages[0].connect(filterStages[1]);
+    filterStages[1].connect(filterStages[2]);
+    filterStages[2].connect(filterStages[3]);
+    filterStages[3].connect(resonancePeak);
+    resonancePeak.connect(drive);
+    drive.connect(pan);
+    pan.connect(trackInput);
+  }
+
+  createOfflinePanNode(context, initialPan = 0) {
+    if (typeof context.createStereoPanner === "function") {
+      const panner = context.createStereoPanner();
+      panner.pan.value = this.clamp(initialPan, -1, 1);
+      return panner;
+    }
+    return context.createGain();
+  }
+
+  setOfflinePanValue(node, panValue) {
+    if (!node) {
+      return;
+    }
+    if (node.pan) {
+      node.pan.value = this.clamp(panValue, -1, 1);
+    }
+  }
+
+  audioBufferToWavBlob(audioBuffer) {
+    const channels = Math.min(2, Math.max(1, audioBuffer.numberOfChannels || 1));
+    const sampleRate = audioBuffer.sampleRate || 48000;
+    const bitDepth = 16;
+    const frameCount = audioBuffer.length;
+    const blockAlign = channels * (bitDepth / 8);
+    const byteRate = sampleRate * blockAlign;
+    const dataSize = frameCount * blockAlign;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+
+    const writeString = (offset, text) => {
+      for (let i = 0; i < text.length; i += 1) {
+        view.setUint8(offset + i, text.charCodeAt(i));
+      }
+    };
+
+    writeString(0, "RIFF");
+    view.setUint32(4, 36 + dataSize, true);
+    writeString(8, "WAVE");
+    writeString(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, channels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, byteRate, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitDepth, true);
+    writeString(36, "data");
+    view.setUint32(40, dataSize, true);
+
+    const channelData = Array.from({ length: channels }, (_, index) =>
+      audioBuffer.getChannelData(Math.min(index, audioBuffer.numberOfChannels - 1))
+    );
+
+    let offset = 44;
+    for (let i = 0; i < frameCount; i += 1) {
+      for (let channel = 0; channel < channels; channel += 1) {
+        const sample = this.clamp(channelData[channel][i] || 0, -1, 1);
+        const int16 = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+        view.setInt16(offset, Math.round(int16), true);
+        offset += 2;
+      }
+    }
+
+    return new Blob([buffer], { type: "audio/wav" });
+  }
+
+  downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1200);
   }
 
   activateExclusiveModeButton(activeButton) {
@@ -2295,6 +2812,10 @@ class BullfrogDrums {
     this.honeyMeterNode.fftSize = 256;
     this.honeyMeterNode.smoothingTimeConstant = 0.78;
     this.honeyMeterBuffer = new Uint8Array(this.honeyMeterNode.frequencyBinCount);
+    this.exportTapNode =
+      typeof this.audioCtx.createMediaStreamDestination === "function"
+        ? this.audioCtx.createMediaStreamDestination()
+        : null;
 
     this.masterInput.connect(this.masterHeadroom);
     this.masterHeadroom.connect(this.masterFilter);
@@ -2305,6 +2826,9 @@ class BullfrogDrums {
     this.masterLimiter.connect(this.masterGain);
     this.masterGain.connect(this.audioCtx.destination);
     this.masterGain.connect(this.honeyMeterNode);
+    if (this.exportTapNode) {
+      this.masterGain.connect(this.exportTapNode);
+    }
 
     this.trackInputs = [];
     this.trackPreDrives = [];
@@ -3029,14 +3553,21 @@ class BullfrogDrums {
     };
   }
 
-  makeNoiseBuffer() {
-    const length = this.audioCtx.sampleRate;
-    const buffer = this.audioCtx.createBuffer(1, length, this.audioCtx.sampleRate);
+  makeNoiseBufferForContext(audioContext) {
+    if (!audioContext) {
+      return null;
+    }
+    const length = audioContext.sampleRate;
+    const buffer = audioContext.createBuffer(1, length, audioContext.sampleRate);
     const data = buffer.getChannelData(0);
     for (let i = 0; i < length; i += 1) {
       data[i] = Math.random() * 2 - 1;
     }
     return buffer;
+  }
+
+  makeNoiseBuffer() {
+    return this.makeNoiseBufferForContext(this.audioCtx);
   }
 
   makeDriveCurve(amount) {
