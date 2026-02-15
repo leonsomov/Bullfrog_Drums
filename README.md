@@ -2,6 +2,19 @@
 
 Web prototype of a virtual Bullfrog Drums instrument for sample-pack workflow.
 
+## Mini Manual
+
+This is a prototype of Erica Synths Bullfrog Drums web version, created by Geeky Punks.
+
+You can play and jam with our sample packs.
+
+Important:
+
+- Click the GeekyPunks logo to randomize patterns and kit behavior.
+- Or simply refresh the page to get a fresh randomized result.
+
+This version is still in the making, so minor bugs may happen.
+
 ## Run locally
 
 Use a local static server (required for sample loading via `fetch`):
