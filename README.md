@@ -15,6 +15,12 @@ Important:
 
 This version is still in the making, so minor bugs may happen.
 
+### Idea For Next Update
+
+- When you like the groove, hover the right speaker: it should blend to a darker state.
+- Click the right speaker to save/export the full 4-bar loop as a stereo WAV file.
+- Goal: quick capture of random ideas.
+
 ## Run locally
 
 Use a local static server (required for sample loading via `fetch`):
