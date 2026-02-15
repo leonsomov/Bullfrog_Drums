@@ -262,8 +262,10 @@ class BullfrogDrums {
   }
 
   buildPatternDefaults() {
-    this.pattern = this.generateGoodGroovePattern();
-    this.patternBanks[this.patternBankIndex] = this.clonePattern(this.pattern);
+    const basePattern = this.generateGoodGroovePattern();
+    this.seedFourBarVariations(basePattern);
+    this.patternBankIndex = 0;
+    this.pattern = this.clonePattern(this.patternBanks[0]);
     this.sequenceStart = 0;
     this.sequenceEnd = SEQ_STEPS - 1;
     this.lastStep = this.sequenceEnd + 1;
@@ -1686,6 +1688,72 @@ class BullfrogDrums {
       });
   }
 
+  seedFourBarVariations(basePattern) {
+    const variations = this.generateFourBarPatterns(basePattern);
+    for (let bank = 0; bank < this.patternBanks.length; bank += 1) {
+      this.patternBanks[bank] = this.clonePattern(variations[bank % 4]);
+    }
+  }
+
+  generateFourBarPatterns(basePattern) {
+    return [
+      this.clonePattern(basePattern),
+      this.createBarVariation(basePattern, 1),
+      this.createBarVariation(basePattern, 2),
+      this.createBarVariation(basePattern, 3)
+    ];
+  }
+
+  createBarVariation(basePattern, variationIndex) {
+    const pattern = this.clonePattern(basePattern);
+    const chance = (value) => Math.random() < value;
+    const pick = (values) => values[Math.floor(Math.random() * values.length)];
+    const setHit = (track, step, probability = 1) => {
+      if (chance(probability)) {
+        pattern[track][step] = true;
+      }
+    };
+    const clearHit = (track, step, probability = 1) => {
+      if (chance(probability)) {
+        pattern[track][step] = false;
+      }
+    };
+
+    if (variationIndex === 1) {
+      setHit(0, 6, 0.65);
+      setHit(0, 10, 0.58);
+      setHit(2, pick([5, 7, 13]), 0.72);
+      setHit(5, pick([3, 7, 11, 15]), 0.78);
+      setHit(4, pick([6, 8, 10, 14]), 0.7);
+    } else if (variationIndex === 2) {
+      [2, 6, 10, 14].forEach((step) => clearHit(5, step, 0.45));
+      setHit(1, 15, 0.45);
+      setHit(2, pick([6, 9, 11, 14]), 0.82);
+      setHit(3, pick([4, 12, 15]), 0.58);
+      setHit(4, pick([4, 8, 12, 14]), 0.9);
+    } else if (variationIndex === 3) {
+      [12, 13, 14, 15].forEach((step) => setHit(5, step, 0.82));
+      [13, 14, 15].forEach((step) => setHit(2, step, 0.64));
+      [14, 15].forEach((step) => setHit(1, step, 0.66));
+      setHit(6, 15, 0.9);
+      setHit(3, 15, 0.68);
+      setHit(4, pick([11, 12, 14, 15]), 0.88);
+    }
+
+    pattern[0][0] = true;
+    if (!pattern[0][8] && chance(0.72)) {
+      pattern[0][8] = true;
+    }
+    if (!pattern[5].some(Boolean)) {
+      pattern[5][8] = true;
+    }
+    if (!pattern[4].some(Boolean)) {
+      pattern[4][variationIndex * 4] = true;
+    }
+
+    return pattern;
+  }
+
   clearPattern() {
     this.pattern = TRACKS.map(() => Array.from({ length: SEQ_STEPS }, () => false));
     this.patternBanks[this.patternBankIndex] = this.clonePattern(this.pattern);
@@ -1694,8 +1762,11 @@ class BullfrogDrums {
   }
 
   randomizePattern() {
-    this.pattern = this.generateGoodGroovePattern();
-    this.patternBanks[this.patternBankIndex] = this.clonePattern(this.pattern);
+    const basePattern = this.generateGoodGroovePattern();
+    this.seedFourBarVariations(basePattern);
+    this.patternBankIndex = 0;
+    this.pattern = this.clonePattern(this.patternBanks[0]);
+    this.updateBarButtonsFromPatternBank();
     this.stepAutomation = Array.from({ length: SEQ_STEPS }, () => ({}));
     this.renderAllSteps();
   }
