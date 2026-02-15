@@ -1684,6 +1684,12 @@ class BullfrogDrums {
         resonance: [0.8, 3.8],
         drive: [0, 0],
         pan: [-0.22, 0.22]
+      },
+      5: {
+        loopPoint: [0, 0.06]
+      },
+      6: {
+        loopPoint: [0, 0.07]
       }
     };
 
