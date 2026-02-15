@@ -2092,6 +2092,8 @@ class BullfrogDrums {
     if (this.audioCtx.state === "suspended") {
       await this.audioCtx.resume();
     }
+
+    this.startHoneyAnalyzer();
   }
 
   buildAudioGraph() {
@@ -2116,6 +2118,10 @@ class BullfrogDrums {
     this.masterLimiter.release.value = 0.12;
     this.masterGain = this.audioCtx.createGain();
     this.masterDrive.curve = this.makeDriveCurve(0);
+    this.honeyMeterNode = this.audioCtx.createAnalyser();
+    this.honeyMeterNode.fftSize = 256;
+    this.honeyMeterNode.smoothingTimeConstant = 0.78;
+    this.honeyMeterBuffer = new Uint8Array(this.honeyMeterNode.frequencyBinCount);
 
     this.masterInput.connect(this.masterHeadroom);
     this.masterHeadroom.connect(this.masterFilter);
@@ -2125,6 +2131,7 @@ class BullfrogDrums {
     this.masterSoftClip.connect(this.masterLimiter);
     this.masterLimiter.connect(this.masterGain);
     this.masterGain.connect(this.audioCtx.destination);
+    this.masterGain.connect(this.honeyMeterNode);
 
     this.trackInputs = [];
     this.trackPreDrives = [];
