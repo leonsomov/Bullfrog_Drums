@@ -88,23 +88,64 @@ body {
 
 .honey-grid {
   --analyzer-level: 0;
+  --honey-dot-size: 4px;
+  --honey-dot-gap: 16px;
+  --honey-dot-alpha-base: 0.28;
+  --honey-dot-alpha-live: 0.24;
+  --honey-core-alpha: 0.08;
+  --honey-core-live: 0.32;
   width: 88px;
   height: 88px;
   border-radius: 50%;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
   background:
-    radial-gradient(circle, rgb(90 135 150 / calc(0.84 + var(--analyzer-level) * 0.26)) 4px, transparent 5px) center / 16px 16px,
+    radial-gradient(circle at 32% 26%, rgb(208 234 245 / 0.58), rgb(161 198 214 / 0.46) 34%, rgb(81 118 134 / 0.28) 62%),
+    linear-gradient(180deg, #d7e6ed 0%, #a7c4d1 52%, #8ba8b6 100%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.52),
+    inset 0 -8px 14px rgb(6 21 32 / 0.16);
+  filter: saturate(calc(0.9 + var(--analyzer-level) * 0.65));
+  transition: filter 55ms linear, box-shadow 120ms ease;
+}
+
+.honey-grid::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: radial-gradient(
+      circle,
+      rgb(69 118 140 / calc(var(--honey-dot-alpha-base) + var(--analyzer-level) * var(--honey-dot-alpha-live)))
+        var(--honey-dot-size),
+      transparent calc(var(--honey-dot-size) + 1px)
+    )
+    center / var(--honey-dot-gap) var(--honey-dot-gap);
+}
+
+.honey-grid::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 26% 20%, rgb(255 255 255 / 0.3), rgb(255 255 255 / 0) 42%),
     radial-gradient(
-      circle at 50% 50%,
-      rgb(82 196 224 / calc(var(--analyzer-level) * 0.62)) 0%,
-      rgb(52 103 124 / calc(0.12 + var(--analyzer-level) * 0.36)) 48%,
-      rgb(0 0 0 / 0) 78%
-    );
-  filter: saturate(calc(0.92 + var(--analyzer-level) * 0.95));
-  transition: filter 55ms linear;
+      circle at 50% 58%,
+      rgb(56 118 144 / calc(var(--honey-core-alpha) + var(--analyzer-level) * var(--honey-core-live))) 0%,
+      rgb(0 0 0 / 0) 74%
+    ),
+    linear-gradient(180deg, rgb(255 255 255 / 0.2), rgb(255 255 255 / 0) 40%, rgb(4 14 22 / 0.18) 100%);
 }
 
 .honey-grid.is-active {
-  box-shadow: inset 0 0 14px rgb(56 143 172 / calc(0.12 + var(--analyzer-level) * 0.32));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.58),
+    inset 0 -9px 15px rgb(8 27 39 / 0.2),
+    0 0 0 1px rgb(42 98 124 / calc(0.16 + var(--analyzer-level) * 0.16)),
+    0 0 14px rgb(56 143 172 / calc(0.06 + var(--analyzer-level) * 0.2));
 }
 
 .sample-line {
@@ -392,19 +433,12 @@ body {
 .master-honey {
   width: 70px;
   height: 70px;
-  background:
-    radial-gradient(
-      circle,
-      rgb(90 135 150 / calc(0.84 + var(--analyzer-level) * 0.26)) 3.3px,
-      transparent 4.3px
-    )
-      center / 13px 13px,
-    radial-gradient(
-      circle at 50% 50%,
-      rgb(82 196 224 / calc(var(--analyzer-level) * 0.62)) 0%,
-      rgb(52 103 124 / calc(0.13 + var(--analyzer-level) * 0.38)) 48%,
-      rgb(0 0 0 / 0) 78%
-    );
+  --honey-dot-size: 3.3px;
+  --honey-dot-gap: 13px;
+  --honey-dot-alpha-base: 0.26;
+  --honey-dot-alpha-live: 0.22;
+  --honey-core-alpha: 0.06;
+  --honey-core-live: 0.28;
 }
 
 .geeky-logo-compact {
