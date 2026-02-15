@@ -420,7 +420,7 @@ class BullfrogDrums {
   }
 
   setKnobValue(id, nextValue, options = {}) {
-    const { silent = false, bypassDataMode = false, skipTrackToneStore = false } = options;
+    const { silent = false, bypassDataMode = false, skipTrackToneStore = false, uiOnly = false } = options;
     const knob = this.knobs.get(id);
     if (!knob) {
       return;
@@ -438,6 +438,10 @@ class BullfrogDrums {
     const rotation = -135 + normalized * 270;
     knob.cap.style.setProperty("--rotation", `${rotation}deg`);
     knob.valueLabel.textContent = this.formatValue(id, effectiveValue);
+
+    if (uiOnly) {
+      return;
+    }
 
     if (id === "tempo" && this.dataMode !== "tempo" && !bypassDataMode) {
       const slotValue = Math.round(effectiveValue);
@@ -955,7 +959,7 @@ class BullfrogDrums {
       knob.def.max = 180;
       knob.def.step = 1;
       knob.labelEl.textContent = "Data";
-      this.setKnobValue("tempo", this.controls.tempo, { silent: true });
+      this.setKnobValue("tempo", this.controls.tempo, { silent: true, uiOnly: true });
       return;
     }
 
@@ -964,7 +968,7 @@ class BullfrogDrums {
       knob.def.max = TRACKS.length - 1;
       knob.def.step = 1;
       knob.labelEl.textContent = "Data/Track";
-      this.setKnobValue("tempo", this.selectedTrackIndex, { silent: true });
+      this.setKnobValue("tempo", this.selectedTrackIndex, { silent: true, uiOnly: true });
       return;
     }
 
@@ -973,7 +977,7 @@ class BullfrogDrums {
       knob.def.max = SEQ_STEPS;
       knob.def.step = 1;
       knob.labelEl.textContent = "Data/Step";
-      this.setKnobValue("tempo", this.lastStep, { silent: true });
+      this.setKnobValue("tempo", this.lastStep, { silent: true, uiOnly: true });
       return;
     }
 
@@ -982,7 +986,7 @@ class BullfrogDrums {
       knob.def.max = SEQ_STEPS;
       knob.def.step = 1;
       knob.labelEl.textContent = "Data/Start";
-      this.setKnobValue("tempo", this.trackStartSteps[this.selectedTrackIndex] + 1, { silent: true });
+      this.setKnobValue("tempo", this.trackStartSteps[this.selectedTrackIndex] + 1, { silent: true, uiOnly: true });
       return;
     }
 
@@ -991,7 +995,7 @@ class BullfrogDrums {
       knob.def.max = SEQ_STEPS;
       knob.def.step = 1;
       knob.labelEl.textContent = "Data/End";
-      this.setKnobValue("tempo", this.trackEndSteps[this.selectedTrackIndex] + 1, { silent: true });
+      this.setKnobValue("tempo", this.trackEndSteps[this.selectedTrackIndex] + 1, { silent: true, uiOnly: true });
       return;
     }
 
@@ -1000,7 +1004,7 @@ class BullfrogDrums {
       knob.def.max = this.patternBanks.length;
       knob.def.step = 1;
       knob.labelEl.textContent = "Data/Patt";
-      this.setKnobValue("tempo", this.patternBankIndex + 1, { silent: true });
+      this.setKnobValue("tempo", this.patternBankIndex + 1, { silent: true, uiOnly: true });
       return;
     }
 
@@ -1009,7 +1013,7 @@ class BullfrogDrums {
       knob.def.max = 100;
       knob.def.step = 1;
       knob.labelEl.textContent = "Data/Prob";
-      this.setKnobValue("tempo", this.trackStepProbability[this.selectedTrackIndex] * 100, { silent: true });
+      this.setKnobValue("tempo", this.trackStepProbability[this.selectedTrackIndex] * 100, { silent: true, uiOnly: true });
       return;
     }
 
@@ -1018,7 +1022,7 @@ class BullfrogDrums {
       knob.def.max = 4;
       knob.def.step = 1;
       knob.labelEl.textContent = "Data/Ratch";
-      this.setKnobValue("tempo", this.trackRatchetRepeats[this.selectedTrackIndex], { silent: true });
+      this.setKnobValue("tempo", this.trackRatchetRepeats[this.selectedTrackIndex], { silent: true, uiOnly: true });
       return;
     }
 
@@ -1027,7 +1031,7 @@ class BullfrogDrums {
       knob.def.max = 100;
       knob.def.step = 1;
       knob.labelEl.textContent = "Data/Accent";
-      this.setKnobValue("tempo", this.trackAccentAmounts[this.selectedTrackIndex] * 100, { silent: true });
+      this.setKnobValue("tempo", this.trackAccentAmounts[this.selectedTrackIndex] * 100, { silent: true, uiOnly: true });
       return;
     }
 
@@ -1036,7 +1040,7 @@ class BullfrogDrums {
       knob.def.max = 1;
       knob.def.step = 1;
       knob.labelEl.textContent = "Data/Loop";
-      this.setKnobValue("tempo", this.loopEnabled ? 1 : 0, { silent: true });
+      this.setKnobValue("tempo", this.loopEnabled ? 1 : 0, { silent: true, uiOnly: true });
       return;
     }
 
@@ -1051,7 +1055,7 @@ class BullfrogDrums {
         : this.voiceActiveSlots.every((slot) => this.normalizePlaybackSlot(slot) === this.normalizePlaybackSlot(this.voiceActiveSlots[0]))
           ? this.normalizePlaybackSlot(this.voiceActiveSlots[0])
           : 0;
-    this.setKnobValue("tempo", value, { silent: true });
+    this.setKnobValue("tempo", value, { silent: true, uiOnly: true });
   }
 
   bindUiEvents() {
