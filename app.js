@@ -2139,6 +2139,7 @@ class BullfrogDrums {
     await this.decodeAllSampleBuffers();
     this.isPlaying = true;
     this.playPauseBtn.classList.add("live");
+    this.setPatternBank(0);
     this.currentStep = this.sequenceStart;
     this.clearScheduledUi();
     this.nextNoteTime = this.audioCtx.currentTime + 0.04;
@@ -2235,6 +2236,7 @@ class BullfrogDrums {
     if (this.currentStep >= this.sequenceEnd) {
       if (this.loopEnabled) {
         this.currentStep = this.sequenceStart;
+        this.advancePatternBar();
       } else {
         this.currentStep = this.sequenceEnd;
         this.pauseTransport();
@@ -2242,6 +2244,11 @@ class BullfrogDrums {
       return;
     }
     this.currentStep += 1;
+  }
+
+  advancePatternBar() {
+    const nextBar = (this.patternBankIndex + 1) % 4;
+    this.setPatternBank(nextBar);
   }
 
   async ensureAudioReady() {
