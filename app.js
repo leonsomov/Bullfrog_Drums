@@ -1641,7 +1641,7 @@ class BullfrogDrums {
         loopPoint: [0.06, 0.62],
         cutoff: [700, 7800],
         resonance: [0.8, 3.8],
-        drive: [0.01, 0.16],
+        drive: [0, 0.08],
         pan: [-0.22, 0.22]
       }
     };
@@ -1661,6 +1661,9 @@ class BullfrogDrums {
           raw = this.randomPadPitch();
         } else if (trackIndex === 4 && id === "loopPoint") {
           raw = this.randomPadLoopPoint();
+        } else if (trackIndex === 4 && id === "drive") {
+          const lowBiased = Math.pow(Math.random(), 2.2);
+          raw = min + (max - min) * lowBiased;
         }
         const snapped = this.snap(this.clamp(raw, def.min, def.max), def.step);
         this.voiceControls[trackIndex][id] = snapped;
