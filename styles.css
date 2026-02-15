@@ -87,10 +87,47 @@ body {
 }
 
 .honey-grid {
+  --analyzer-level: 0;
   width: 88px;
   height: 88px;
+  position: relative;
+  overflow: hidden;
   border-radius: 50%;
-  background: radial-gradient(circle, #5a8796 4px, transparent 5px) center / 16px 16px;
+  background:
+    radial-gradient(
+      circle at 50% 50%,
+      rgb(133 228 255 / calc(0.05 + var(--analyzer-level) * 0.5)) 0%,
+      rgb(68 117 136 / calc(0.08 + var(--analyzer-level) * 0.34)) 48%,
+      rgb(0 0 0 / 0) 78%
+    ),
+    radial-gradient(circle, #5a8796 4px, transparent 5px) center / 16px 16px;
+  filter: saturate(calc(0.92 + var(--analyzer-level) * 0.95));
+  transition: filter 70ms linear;
+}
+
+.honey-grid::after {
+  content: "";
+  position: absolute;
+  inset: -8%;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgb(113 228 255 / calc(var(--analyzer-level) * 0.82)) 0%,
+    rgb(31 86 111 / calc(var(--analyzer-level) * 0.36)) 42%,
+    rgb(0 0 0 / 0) 72%
+  );
+  filter: blur(calc(1px + var(--analyzer-level) * 5px));
+  transform: scale(calc(0.86 + var(--analyzer-level) * 0.22));
+  opacity: calc(0.12 + var(--analyzer-level) * 0.92);
+  transition:
+    opacity 70ms linear,
+    transform 70ms linear,
+    filter 70ms linear;
+}
+
+.honey-grid.is-active {
+  box-shadow: 0 0 8px rgb(95 202 236 / calc(0.2 + var(--analyzer-level) * 0.45));
 }
 
 .sample-line {
@@ -378,7 +415,14 @@ body {
 .master-honey {
   width: 70px;
   height: 70px;
-  background: radial-gradient(circle, #5a8796 3.3px, transparent 4.3px) center / 13px 13px;
+  background:
+    radial-gradient(
+      circle at 50% 50%,
+      rgb(133 228 255 / calc(0.06 + var(--analyzer-level) * 0.52)) 0%,
+      rgb(68 117 136 / calc(0.1 + var(--analyzer-level) * 0.36)) 48%,
+      rgb(0 0 0 / 0) 78%
+    ),
+    radial-gradient(circle, #5a8796 3.3px, transparent 4.3px) center / 13px 13px;
 }
 
 .geeky-logo-compact {

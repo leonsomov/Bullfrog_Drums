@@ -691,6 +691,68 @@ class BullfrogDrums {
     this.applyAllTrackToneStates();
   }
 
+  startHoneyAnalyzer() {
+    if (!this.honeySpeakerEls.length || this.honeyMeterFrame !== null) {
+      return;
+    }
+    const step = () => {
+      this.honeyMeterFrame = window.requestAnimationFrame(step);
+      this.updateHoneyAnalyzerFrame();
+    };
+    step();
+  }
+
+  updateHoneyAnalyzerFrame() {
+    if (!this.audioCtx || !this.honeyMeterNode || !this.honeyMeterBuffer) {
+      this.applyHoneyAnalyzerLevels(0, 0);
+      return;
+    }
+
+    this.honeyMeterNode.getByteFrequencyData(this.honeyMeterBuffer);
+    const bins = this.honeyMeterBuffer;
+    const split = this.clamp(Math.floor(bins.length * 0.42), 8, bins.length - 8);
+
+    let lowSum = 0;
+    for (let i = 0; i < split; i += 1) {
+      lowSum += bins[i];
+    }
+    let highSum = 0;
+    for (let i = split; i < bins.length; i += 1) {
+      highSum += bins[i];
+    }
+
+    const lowNorm = split > 0 ? lowSum / (split * 255) : 0;
+    const highCount = bins.length - split;
+    const highNorm = highCount > 0 ? highSum / (highCount * 255) : 0;
+
+    const targetLeft = this.clamp((lowNorm - 0.03) * 2.1, 0, 1);
+    const targetRight = this.clamp((highNorm - 0.02) * 2.2, 0, 1);
+
+    this.honeyLevels[0] = this.smoothHoneyLevel(this.honeyLevels[0], targetLeft);
+    this.honeyLevels[1] = this.smoothHoneyLevel(this.honeyLevels[1], targetRight);
+    this.applyHoneyAnalyzerLevels(this.honeyLevels[0], this.honeyLevels[1]);
+  }
+
+  smoothHoneyLevel(current, target) {
+    const attack = 0.38;
+    const release = 0.14;
+    const speed = target > current ? attack : release;
+    return current + (target - current) * speed;
+  }
+
+  applyHoneyAnalyzerLevels(leftLevel, rightLevel) {
+    if (!this.honeySpeakerEls.length) {
+      return;
+    }
+    const left = this.clamp(leftLevel, 0, 1);
+    const right = this.clamp(rightLevel, 0, 1);
+    this.honeySpeakerEls.forEach((element, index) => {
+      const level = index === 0 ? left : right;
+      element.style.setProperty("--analyzer-level", level.toFixed(3));
+      element.classList.toggle("is-active", level > 0.02);
+    });
+  }
+
   buildSequencer() {
     this.gridHead.innerHTML = "";
     this.gridBody.innerHTML = "";
