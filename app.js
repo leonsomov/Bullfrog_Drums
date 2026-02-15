@@ -152,9 +152,11 @@ class BullfrogDrums {
 
     this.audioCtx = null;
     this.masterInput = null;
+    this.masterHeadroom = null;
     this.masterFilter = null;
     this.masterDrive = null;
     this.masterPan = null;
+    this.masterSoftClip = null;
     this.masterLimiter = null;
     this.masterGain = null;
     this.trackInputs = [];
@@ -653,7 +655,7 @@ class BullfrogDrums {
     }
 
     const now = this.audioCtx.currentTime;
-    this.masterGain.gain.setTargetAtTime(this.controls.volume, now, 0.01);
+    this.masterGain.gain.setTargetAtTime(this.controls.volume * 0.92, now, 0.01);
     this.masterFilter.frequency.setTargetAtTime(18000, now, 0.01);
     this.masterFilter.Q.setTargetAtTime(0.707, now, 0.01);
     this.setPanValue(this.masterPan, 0, now, 0.01);
@@ -1641,7 +1643,7 @@ class BullfrogDrums {
         loopPoint: [0.06, 0.62],
         cutoff: [700, 7800],
         resonance: [0.8, 3.8],
-        drive: [0, 0.08],
+        drive: [0, 0],
         pan: [-0.22, 0.22]
       }
     };
@@ -1662,8 +1664,7 @@ class BullfrogDrums {
         } else if (trackIndex === 4 && id === "loopPoint") {
           raw = this.randomPadLoopPoint();
         } else if (trackIndex === 4 && id === "drive") {
-          const lowBiased = Math.pow(Math.random(), 2.2);
-          raw = min + (max - min) * lowBiased;
+          raw = 0;
         }
         const snapped = this.snap(this.clamp(raw, def.min, def.max), def.step);
         this.voiceControls[trackIndex][id] = snapped;
@@ -1993,8 +1994,9 @@ class BullfrogDrums {
       const repeats = Math.max(1, this.ratchetRepeats);
       const spacing = secPerStep / repeats;
       const accentScale = step % 4 === 0 ? 1 + this.accentAmount * 0.5 : 1;
+      const repeatCompensation = 1 / Math.sqrt(repeats);
       for (let repeat = 0; repeat < repeats; repeat += 1) {
-        this.triggerTrack(track, time + repeat * spacing, { levelScale: accentScale });
+        this.triggerTrack(track, time + repeat * spacing, { levelScale: accentScale * repeatCompensation });
       }
     }
   }
@@ -2033,6 +2035,8 @@ class BullfrogDrums {
 
   buildAudioGraph() {
     this.masterInput = this.audioCtx.createGain();
+    this.masterHeadroom = this.audioCtx.createGain();
+    this.masterHeadroom.gain.value = 0.66;
     this.masterFilter = this.audioCtx.createBiquadFilter();
     this.masterFilter.type = "lowpass";
     this.masterFilter.frequency.value = 18000;
@@ -2040,19 +2044,24 @@ class BullfrogDrums {
     this.masterDrive = this.audioCtx.createWaveShaper();
     this.masterDrive.oversample = "4x";
     this.masterPan = this.createPanNode(0);
+    this.masterSoftClip = this.audioCtx.createWaveShaper();
+    this.masterSoftClip.oversample = "4x";
+    this.masterSoftClip.curve = this.makeSoftClipCurve(1);
     this.masterLimiter = this.audioCtx.createDynamicsCompressor();
-    this.masterLimiter.threshold.value = -3;
-    this.masterLimiter.knee.value = 2;
-    this.masterLimiter.ratio.value = 20;
-    this.masterLimiter.attack.value = 0.003;
-    this.masterLimiter.release.value = 0.06;
+    this.masterLimiter.threshold.value = -9;
+    this.masterLimiter.knee.value = 12;
+    this.masterLimiter.ratio.value = 3.2;
+    this.masterLimiter.attack.value = 0.004;
+    this.masterLimiter.release.value = 0.11;
     this.masterGain = this.audioCtx.createGain();
     this.masterDrive.curve = this.makeDriveCurve(0);
 
-    this.masterInput.connect(this.masterFilter);
+    this.masterInput.connect(this.masterHeadroom);
+    this.masterHeadroom.connect(this.masterFilter);
     this.masterFilter.connect(this.masterDrive);
     this.masterDrive.connect(this.masterPan);
-    this.masterPan.connect(this.masterLimiter);
+    this.masterPan.connect(this.masterSoftClip);
+    this.masterSoftClip.connect(this.masterLimiter);
     this.masterLimiter.connect(this.masterGain);
     this.masterGain.connect(this.audioCtx.destination);
 
@@ -2189,7 +2198,7 @@ class BullfrogDrums {
 
   triggerTrack(trackIndex, time, options = {}) {
     const { allowHtmlFallback = false, levelScale = 1 } = options;
-    const level = this.trackLevels[trackIndex] * levelScale;
+    const level = this.clamp(this.trackLevels[trackIndex] * levelScale, 0, 0.88);
     if (level <= 0.001) {
       return;
     }
@@ -2788,6 +2797,18 @@ class BullfrogDrums {
     for (let i = 0; i < samples; i += 1) {
       const x = (i * 2) / (samples - 1) - 1;
       curve[i] = ((1 + k) * x) / (1 + k * Math.abs(x));
+    }
+    return curve;
+  }
+
+  makeSoftClipCurve(amount = 1) {
+    const drive = this.clamp(amount, 0.2, 2.5);
+    const samples = 2048;
+    const curve = new Float32Array(samples);
+    const norm = Math.tanh(1 + drive * 1.4);
+    for (let i = 0; i < samples; i += 1) {
+      const x = (i * 2) / (samples - 1) - 1;
+      curve[i] = Math.tanh(x * (1 + drive * 1.4)) / norm;
     }
     return curve;
   }
