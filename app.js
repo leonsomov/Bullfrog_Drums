@@ -1686,10 +1686,12 @@ class BullfrogDrums {
         pan: [-0.22, 0.22]
       },
       5: {
-        loopPoint: [0, 0.06]
+        loopPoint: [0, 0.06],
+        cutoff: [5200, 14500]
       },
       6: {
-        loopPoint: [0, 0.07]
+        loopPoint: [0, 0.07],
+        cutoff: [4400, 14500]
       }
     };
 
@@ -2185,7 +2187,8 @@ class BullfrogDrums {
       return;
     }
     const now = this.audioCtx.currentTime;
-    const ladderCutoff = this.mapCutoffToLadderFrequency(tone.cutoff);
+    const cutoffFloor = this.getTrackCutoffFloor(safeTrack);
+    const ladderCutoff = Math.max(cutoffFloor, this.mapCutoffToLadderFrequency(tone.cutoff));
     const q = this.mapResonanceToLadderQ(tone.resonance);
     const resonanceNorm = this.clamp(q / 18, 0, 1);
     const driveNorm = this.clamp(tone.drive, 0, 1);
@@ -2197,13 +2200,14 @@ class BullfrogDrums {
     const cutoffMultipliers = [1.3, 1.08, 0.9, 0.72];
     const qWeights = [0.18, 0.3, 0.52, 0.84];
     filterStages.forEach((filter, index) => {
-      const stageCutoff = this.clamp(ladderCutoff * (cutoffMultipliers[index] || 1), 38, 18000);
+      const stageMin = Math.max(38, cutoffFloor * 0.72);
+      const stageCutoff = this.clamp(ladderCutoff * (cutoffMultipliers[index] || 1), stageMin, 18000);
       const stageQ = this.clamp(0.18 + q * (qWeights[index] || 0.25), 0.1, 28);
       filter.frequency.setTargetAtTime(stageCutoff, now, 0.01);
       filter.Q.setTargetAtTime(stageQ, now, 0.01);
     });
 
-    resonancePeak.frequency.setTargetAtTime(this.clamp(ladderCutoff * 0.92, 45, 15000), now, 0.01);
+    resonancePeak.frequency.setTargetAtTime(this.clamp(ladderCutoff * 0.92, Math.max(45, cutoffFloor * 0.7), 15000), now, 0.01);
     resonancePeak.Q.setTargetAtTime(this.clamp(0.45 + q * 0.5, 0.3, 24), now, 0.01);
     resonancePeak.gain.setTargetAtTime(-8 + resonanceNorm * 14, now, 0.01);
 
@@ -2216,6 +2220,17 @@ class BullfrogDrums {
     const norm = this.clamp((cutoffValue - minIn) / Math.max(1, maxIn - minIn), 0, 1);
     const shaped = Math.pow(norm, 2.05);
     return 38 + shaped * (12600 - 38);
+  }
+
+  getTrackCutoffFloor(trackIndex) {
+    const safeTrack = this.clamp(Math.round(trackIndex), 0, TRACKS.length - 1);
+    if (safeTrack === 5) {
+      return 4800;
+    }
+    if (safeTrack === 6) {
+      return 4200;
+    }
+    return 38;
   }
 
   mapResonanceToLadderQ(resonanceValue) {
