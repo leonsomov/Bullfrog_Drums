@@ -1597,6 +1597,7 @@ class BullfrogDrums {
   randomizePatternAndKit() {
     this.stepProbability = 1;
     this.ratchetRepeats = 1;
+    this.loopEnabled = true;
     this.shuffleOn = false;
     if (this.shuffleBtn) {
       this.shuffleBtn.classList.remove("live");
@@ -1636,12 +1637,12 @@ class BullfrogDrums {
         pan: [0, 0]
       },
       4: {
-        decay: [0.65, 1.55],
-        loopPoint: [0, 0.18],
-        cutoff: [500, 9000],
-        resonance: [0.9, 5.4],
-        drive: [0.01, 0.2],
-        pan: [-0.28, 0.28]
+        decay: [1.02, 1.6],
+        loopPoint: [0.06, 0.62],
+        cutoff: [700, 7800],
+        resonance: [0.8, 3.8],
+        drive: [0.01, 0.16],
+        pan: [-0.22, 0.22]
       }
     };
 
@@ -1655,7 +1656,12 @@ class BullfrogDrums {
         if (!def) {
           return;
         }
-        const raw = this.randomRange(min, max);
+        let raw = this.randomRange(min, max);
+        if (trackIndex === 4 && id === "pitch") {
+          raw = this.randomPadPitch();
+        } else if (trackIndex === 4 && id === "loopPoint") {
+          raw = this.randomPadLoopPoint();
+        }
         const snapped = this.snap(this.clamp(raw, def.min, def.max), def.step);
         this.voiceControls[trackIndex][id] = snapped;
       });
@@ -1687,6 +1693,18 @@ class BullfrogDrums {
 
   randomRange(min, max) {
     return min + Math.random() * (max - min);
+  }
+
+  randomPadPitch() {
+    const semitones = [-7, -5, -3, 0, 2, 3, 5, 7];
+    return semitones[Math.floor(Math.random() * semitones.length)];
+  }
+
+  randomPadLoopPoint() {
+    const anchors = [0.08, 0.12, 0.17, 0.24, 0.31, 0.38, 0.45, 0.52, 0.58];
+    const base = anchors[Math.floor(Math.random() * anchors.length)];
+    const jitter = this.randomRange(-0.015, 0.015);
+    return this.clamp(base + jitter, 0.04, 0.65);
   }
 
   generateGoodGroovePattern() {
@@ -1749,11 +1767,26 @@ class BullfrogDrums {
         pattern[3][step] = true;
       }
     });
-    groove.fx.forEach((step) => {
-      if (maybe(0.7)) {
-        pattern[4][step] = true;
-      }
+    const padMotifs = [
+      [0, 8],
+      [4, 12],
+      [0, 10],
+      [2, 14],
+      [0, 12],
+      [6, 14]
+    ];
+    const chosenPadMotif = padMotifs[Math.floor(Math.random() * padMotifs.length)];
+    pattern[4].fill(false);
+    chosenPadMotif.forEach((step) => {
+      pattern[4][step] = true;
     });
+    if (maybe(0.35)) {
+      const tails = [7, 11, 15];
+      pattern[4][tails[Math.floor(Math.random() * tails.length)]] = true;
+    }
+    if (maybe(0.22)) {
+      pattern[4][(chosenPadMotif[0] + 4) % SEQ_STEPS] = true;
+    }
     groove.hihat.forEach((step) => {
       if (maybe(0.92)) {
         pattern[5][step] = true;
@@ -1929,7 +1962,7 @@ class BullfrogDrums {
       return;
     }
 
-    while (this.nextNoteTime < this.audioCtx.currentTime + this.scheduleAheadSec) {
+    while (this.isPlaying && this.nextNoteTime < this.audioCtx.currentTime + this.scheduleAheadSec) {
       this.scheduleStep(this.currentStep, this.nextNoteTime);
       this.advanceStep();
     }
@@ -1972,7 +2005,12 @@ class BullfrogDrums {
     this.nextNoteTime += Math.max(0.002, secPerStep + swingOffset);
 
     if (this.currentStep >= this.sequenceEnd) {
-      this.currentStep = this.sequenceStart;
+      if (this.loopEnabled) {
+        this.currentStep = this.sequenceStart;
+      } else {
+        this.currentStep = this.sequenceEnd;
+        this.pauseTransport();
+      }
       return;
     }
     this.currentStep += 1;
