@@ -51,7 +51,7 @@ const CONTROL_DEFS = [
   {
     id: "resonance",
     label: "Resonance",
-    min: 0.4,
+    min: 0,
     max: 24,
     step: 0.1,
     value: 1.5,
@@ -118,6 +118,11 @@ class BullfrogDrums {
     this.accentAmount = 0.35;
     this.loopEnabled = true;
     this.lastStep = SEQ_STEPS;
+    this.trackStartSteps = TRACKS.map(() => 0);
+    this.trackEndSteps = TRACKS.map(() => SEQ_STEPS - 1);
+    this.trackStepProbability = TRACKS.map(() => 1);
+    this.trackRatchetRepeats = TRACKS.map(() => 1);
+    this.trackAccentAmounts = TRACKS.map(() => 0.35);
 
     this.dataMode = "tempo";
     this.modeButtons = [];
@@ -439,19 +444,25 @@ class BullfrogDrums {
       } else if (this.dataMode === "lastStep") {
         this.setLastStep(slotValue);
       } else if (this.dataMode === "start") {
-        this.setSequenceStart(slotValue);
+        this.setTrackStartStep(this.selectedTrackIndex, slotValue);
       } else if (this.dataMode === "end") {
-        this.setSequenceEnd(slotValue);
+        this.setTrackEndStep(this.selectedTrackIndex, slotValue);
       } else if (this.dataMode === "kit") {
         this.setKitSlotForAllVoices(cappedSlot);
       } else if (this.dataMode === "pattern") {
         this.setPatternBank(slotValue - 1);
       } else if (this.dataMode === "odds") {
-        this.stepProbability = this.clamp(slotValue / 100, 0, 1);
+        const value = this.clamp(slotValue / 100, 0, 1);
+        this.trackStepProbability[this.selectedTrackIndex] = value;
+        this.stepProbability = value;
       } else if (this.dataMode === "ratchet") {
-        this.ratchetRepeats = this.clamp(slotValue, 1, 4);
+        const value = this.clamp(slotValue, 1, 4);
+        this.trackRatchetRepeats[this.selectedTrackIndex] = value;
+        this.ratchetRepeats = value;
       } else if (this.dataMode === "accent") {
-        this.accentAmount = this.clamp(slotValue / 100, 0, 1);
+        const value = this.clamp(slotValue / 100, 0, 1);
+        this.trackAccentAmounts[this.selectedTrackIndex] = value;
+        this.accentAmount = value;
       } else if (this.dataMode === "loop") {
         this.loopEnabled = slotValue >= 1;
       }
@@ -468,19 +479,29 @@ class BullfrogDrums {
             : this.dataMode === "lastStep"
               ? `LAST STEP set to ${String(this.lastStep).padStart(2, "0")}.`
               : this.dataMode === "start"
-                ? `START step set to ${String(this.sequenceStart + 1).padStart(2, "0")}.`
+                ? `START step for Track ${this.selectedTrackIndex + 1} set to ${String(
+                    this.trackStartSteps[this.selectedTrackIndex] + 1
+                  ).padStart(2, "0")}.`
                 : this.dataMode === "end"
-                  ? `END step set to ${String(this.sequenceEnd + 1).padStart(2, "0")}.`
+                  ? `END step for Track ${this.selectedTrackIndex + 1} set to ${String(
+                      this.trackEndSteps[this.selectedTrackIndex] + 1
+                    ).padStart(2, "0")}.`
               : this.dataMode === "kit"
                 ? `KIT mode: all voices set to slot ${String(cappedSlot).padStart(2, "0")}.`
                 : this.dataMode === "pattern"
                   ? `PATTERN bank ${this.patternBankIndex + 1} selected.`
                   : this.dataMode === "odds"
-                    ? `PROB set to ${Math.round(this.stepProbability * 100)}%.`
+                    ? `PROB for Track ${this.selectedTrackIndex + 1} set to ${Math.round(
+                        this.trackStepProbability[this.selectedTrackIndex] * 100
+                      )}%.`
                     : this.dataMode === "ratchet"
-                      ? `RATCHET set to x${this.ratchetRepeats}.`
+                      ? `RATCHET for Track ${this.selectedTrackIndex + 1} set to x${
+                          this.trackRatchetRepeats[this.selectedTrackIndex]
+                        }.`
                       : this.dataMode === "accent"
-                        ? `ACCENT set to ${Math.round(this.accentAmount * 100)}%.`
+                        ? `ACCENT for Track ${this.selectedTrackIndex + 1} set to ${Math.round(
+                            this.trackAccentAmounts[this.selectedTrackIndex] * 100
+                          )}%.`
                         : this.dataMode === "loop"
                           ? `LOOP ${this.loopEnabled ? "ON" : "OFF"}.`
               : `TRACK mode: selected Track ${this.selectedTrackIndex + 1}.`;
@@ -835,7 +856,7 @@ class BullfrogDrums {
       this.renderVoiceManager();
     }
 
-    if (this.dataMode === "sample") {
+    if (this.dataMode !== "tempo") {
       this.syncDataKnobToCurrentMode();
     }
   }
@@ -888,7 +909,7 @@ class BullfrogDrums {
       knob.def.max = SEQ_STEPS;
       knob.def.step = 1;
       knob.labelEl.textContent = "Data/Start";
-      this.setKnobValue("tempo", this.sequenceStart + 1, { silent: true });
+      this.setKnobValue("tempo", this.trackStartSteps[this.selectedTrackIndex] + 1, { silent: true });
       return;
     }
 
@@ -897,7 +918,7 @@ class BullfrogDrums {
       knob.def.max = SEQ_STEPS;
       knob.def.step = 1;
       knob.labelEl.textContent = "Data/End";
-      this.setKnobValue("tempo", this.sequenceEnd + 1, { silent: true });
+      this.setKnobValue("tempo", this.trackEndSteps[this.selectedTrackIndex] + 1, { silent: true });
       return;
     }
 
@@ -915,7 +936,7 @@ class BullfrogDrums {
       knob.def.max = 100;
       knob.def.step = 1;
       knob.labelEl.textContent = "Data/Prob";
-      this.setKnobValue("tempo", this.stepProbability * 100, { silent: true });
+      this.setKnobValue("tempo", this.trackStepProbability[this.selectedTrackIndex] * 100, { silent: true });
       return;
     }
 
@@ -924,7 +945,7 @@ class BullfrogDrums {
       knob.def.max = 4;
       knob.def.step = 1;
       knob.labelEl.textContent = "Data/Ratch";
-      this.setKnobValue("tempo", this.ratchetRepeats, { silent: true });
+      this.setKnobValue("tempo", this.trackRatchetRepeats[this.selectedTrackIndex], { silent: true });
       return;
     }
 
@@ -933,7 +954,7 @@ class BullfrogDrums {
       knob.def.max = 100;
       knob.def.step = 1;
       knob.labelEl.textContent = "Data/Accent";
-      this.setKnobValue("tempo", this.accentAmount * 100, { silent: true });
+      this.setKnobValue("tempo", this.trackAccentAmounts[this.selectedTrackIndex] * 100, { silent: true });
       return;
     }
 
@@ -1038,12 +1059,12 @@ class BullfrogDrums {
     bindDataModeButton(this.modeKitBtn, "kit", "KIT mode: DATA knob sets all voices to the same slot.");
     bindDataModeButton(this.modeLastStepBtn, "lastStep", "LAST STEP mode: DATA knob sets sequence length.");
     bindDataModeButton(this.modePatternBtn, "pattern", "PATTERN mode: DATA knob selects pattern bank.");
-    bindDataModeButton(this.modeStartBtn, "start", "START mode: DATA knob sets first step.");
-    bindDataModeButton(this.modeEndBtn, "end", "END mode: DATA knob sets last step.");
+    bindDataModeButton(this.modeStartBtn, "start", "START mode: DATA knob sets first step for selected track.");
+    bindDataModeButton(this.modeEndBtn, "end", "END mode: DATA knob sets last step for selected track.");
     bindDataModeButton(this.modeLoopBtn, "loop", "LOOP mode: DATA knob toggles loop on/off.");
-    bindDataModeButton(this.modeAccentBtn, "accent", "ACCENT mode: DATA knob sets accent amount.");
-    bindDataModeButton(this.modeRatchetBtn, "ratchet", "RATCHET mode: DATA knob sets repeats.");
-    bindDataModeButton(this.modeOddsBtn, "odds", "ODDS/PROB mode: DATA knob sets hit probability.");
+    bindDataModeButton(this.modeAccentBtn, "accent", "ACCENT mode: DATA knob sets accent amount for selected track.");
+    bindDataModeButton(this.modeRatchetBtn, "ratchet", "RATCHET mode: DATA knob sets repeats for selected track.");
+    bindDataModeButton(this.modeOddsBtn, "odds", "ODDS/PROB mode: DATA knob sets hit probability for selected track.");
 
     if (this.modeMuteBtn) {
       this.modeMuteBtn.addEventListener("click", () => {
@@ -1441,22 +1462,22 @@ class BullfrogDrums {
         return this.lastStep;
       }
       if (this.dataMode === "start") {
-        return this.sequenceStart + 1;
+        return this.trackStartSteps[this.selectedTrackIndex] + 1;
       }
       if (this.dataMode === "end") {
-        return this.sequenceEnd + 1;
+        return this.trackEndSteps[this.selectedTrackIndex] + 1;
       }
       if (this.dataMode === "pattern") {
         return this.patternBankIndex + 1;
       }
       if (this.dataMode === "odds") {
-        return this.stepProbability * 100;
+        return this.trackStepProbability[this.selectedTrackIndex] * 100;
       }
       if (this.dataMode === "ratchet") {
-        return this.ratchetRepeats;
+        return this.trackRatchetRepeats[this.selectedTrackIndex];
       }
       if (this.dataMode === "accent") {
-        return this.accentAmount * 100;
+        return this.trackAccentAmounts[this.selectedTrackIndex] * 100;
       }
       if (this.dataMode === "loop") {
         return this.loopEnabled ? 1 : 0;
@@ -1532,6 +1553,18 @@ class BullfrogDrums {
     this.setSequenceEnd(value);
   }
 
+  setTrackStartStep(trackIndex, value) {
+    const safeTrack = this.clamp(Math.round(trackIndex), 0, TRACKS.length - 1);
+    const next = Math.round(this.clamp(value, 1, SEQ_STEPS)) - 1;
+    this.trackStartSteps[safeTrack] = Math.min(next, this.trackEndSteps[safeTrack]);
+  }
+
+  setTrackEndStep(trackIndex, value) {
+    const safeTrack = this.clamp(Math.round(trackIndex), 0, TRACKS.length - 1);
+    const next = Math.round(this.clamp(value, 1, SEQ_STEPS)) - 1;
+    this.trackEndSteps[safeTrack] = Math.max(next, this.trackStartSteps[safeTrack]);
+  }
+
   setSequenceStart(value) {
     const next = Math.round(this.clamp(value, 1, SEQ_STEPS)) - 1;
     this.sequenceStart = Math.min(next, this.sequenceEnd);
@@ -1599,6 +1632,12 @@ class BullfrogDrums {
   randomizePatternAndKit() {
     this.stepProbability = 1;
     this.ratchetRepeats = 1;
+    this.trackStepProbability = this.trackStepProbability.map(() => 1);
+    this.trackRatchetRepeats = this.trackRatchetRepeats.map(() => 1);
+    this.trackAccentAmounts = this.trackAccentAmounts.map(() => 0.35);
+    this.trackStartSteps = this.trackStartSteps.map(() => 0);
+    this.trackEndSteps = this.trackEndSteps.map(() => SEQ_STEPS - 1);
+    this.accentAmount = this.trackAccentAmounts[this.selectedTrackIndex];
     this.loopEnabled = true;
     this.shuffleOn = false;
     if (this.shuffleBtn) {
@@ -1889,19 +1928,19 @@ class BullfrogDrums {
       value = String(this.patternBankIndex + 1).padStart(2, "0");
       label = "PATT";
     } else if (this.dataMode === "start") {
-      value = String(this.sequenceStart + 1).padStart(2, "0");
+      value = String(this.trackStartSteps[this.selectedTrackIndex] + 1).padStart(2, "0");
       label = "START";
     } else if (this.dataMode === "end") {
-      value = String(this.sequenceEnd + 1).padStart(2, "0");
+      value = String(this.trackEndSteps[this.selectedTrackIndex] + 1).padStart(2, "0");
       label = "END";
     } else if (this.dataMode === "odds") {
-      value = String(Math.round(this.stepProbability * 100)).padStart(2, "0");
+      value = String(Math.round(this.trackStepProbability[this.selectedTrackIndex] * 100)).padStart(2, "0");
       label = "PROB";
     } else if (this.dataMode === "ratchet") {
-      value = String(this.ratchetRepeats);
+      value = String(this.trackRatchetRepeats[this.selectedTrackIndex]);
       label = "RATCH";
     } else if (this.dataMode === "accent") {
-      value = String(Math.round(this.accentAmount * 100)).padStart(2, "0");
+      value = String(Math.round(this.trackAccentAmounts[this.selectedTrackIndex] * 100)).padStart(2, "0");
       label = "ACC";
     } else if (this.dataMode === "loop") {
       value = this.loopEnabled ? "ON" : "OFF";
@@ -1988,12 +2027,19 @@ class BullfrogDrums {
       if (!this.pattern[track][step] || this.trackMutes[track]) {
         continue;
       }
-      if (Math.random() > this.stepProbability) {
+      const trackStart = this.trackStartSteps[track] ?? 0;
+      const trackEnd = this.trackEndSteps[track] ?? (SEQ_STEPS - 1);
+      if (step < trackStart || step > trackEnd) {
         continue;
       }
-      const repeats = Math.max(1, this.ratchetRepeats);
+      const stepProbability = this.trackStepProbability[track] ?? this.stepProbability;
+      if (Math.random() > stepProbability) {
+        continue;
+      }
+      const repeats = Math.max(1, this.trackRatchetRepeats[track] ?? this.ratchetRepeats);
       const spacing = secPerStep / repeats;
-      const accentScale = step % 4 === 0 ? 1 + this.accentAmount * 0.35 : 1;
+      const accentAmount = this.trackAccentAmounts[track] ?? this.accentAmount;
+      const accentScale = step % 4 === 0 ? 1 + accentAmount * 0.35 : 1;
       const repeatCompensation = 1 / Math.sqrt(repeats);
       for (let repeat = 0; repeat < repeats; repeat += 1) {
         this.triggerTrack(track, time + repeat * spacing, { levelScale: accentScale * repeatCompensation });
@@ -2135,7 +2181,7 @@ class BullfrogDrums {
     const now = this.audioCtx.currentTime;
     const ladderCutoff = this.mapCutoffToLadderFrequency(tone.cutoff);
     const q = this.mapResonanceToLadderQ(tone.resonance);
-    const resonanceNorm = this.clamp((q - 0.45) / 22, 0, 1);
+    const resonanceNorm = this.clamp(q / 18, 0, 1);
     const driveNorm = this.clamp(tone.drive, 0, 1);
     const musicalDrive = Math.pow(driveNorm, 1.8);
     const preDriveAmount = this.clamp(0.02 + resonanceNorm * 0.12 + musicalDrive * 0.28, 0, 0.42);
@@ -2146,14 +2192,14 @@ class BullfrogDrums {
     const qWeights = [0.18, 0.3, 0.52, 0.84];
     filterStages.forEach((filter, index) => {
       const stageCutoff = this.clamp(ladderCutoff * (cutoffMultipliers[index] || 1), 38, 18000);
-      const stageQ = this.clamp(0.25 + q * (qWeights[index] || 0.25), 0.1, 28);
+      const stageQ = this.clamp(0.18 + q * (qWeights[index] || 0.25), 0.1, 28);
       filter.frequency.setTargetAtTime(stageCutoff, now, 0.01);
       filter.Q.setTargetAtTime(stageQ, now, 0.01);
     });
 
     resonancePeak.frequency.setTargetAtTime(this.clamp(ladderCutoff * 0.92, 45, 15000), now, 0.01);
-    resonancePeak.Q.setTargetAtTime(this.clamp(0.7 + q * 0.62, 0.5, 28), now, 0.01);
-    resonancePeak.gain.setTargetAtTime(-2 + resonanceNorm * 9, now, 0.01);
+    resonancePeak.Q.setTargetAtTime(this.clamp(0.45 + q * 0.5, 0.3, 24), now, 0.01);
+    resonancePeak.gain.setTargetAtTime(-8 + resonanceNorm * 14, now, 0.01);
 
     this.setPanValue(pan, this.clamp(tone.pan, -1, 1), now, 0.01);
   }
@@ -2167,10 +2213,10 @@ class BullfrogDrums {
   }
 
   mapResonanceToLadderQ(resonanceValue) {
-    const minIn = CONTROL_DEFS.find((def) => def.id === "resonance")?.min ?? 0.4;
+    const minIn = CONTROL_DEFS.find((def) => def.id === "resonance")?.min ?? 0;
     const maxIn = CONTROL_DEFS.find((def) => def.id === "resonance")?.max ?? 24;
     const norm = this.clamp((resonanceValue - minIn) / Math.max(0.001, maxIn - minIn), 0, 1);
-    return 0.45 + Math.pow(norm, 1.25) * 22;
+    return Math.pow(norm, 1.28) * 18;
   }
 
   applyAllTrackToneStates() {
