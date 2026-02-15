@@ -1716,6 +1716,7 @@ class BullfrogDrums {
     }
     this.randomizePattern();
     this.randomizeKit();
+    this.randomizeTrackFiveStepPositions();
     this.setTempo(Math.round(this.randomRange(96, 150)));
   }
 
@@ -1794,6 +1795,32 @@ class BullfrogDrums {
     this.applyControlState();
     this.renderMainDisplay();
     this.renderAllSteps();
+  }
+
+  randomizeTrackFiveStepPositions() {
+    const trackIndex = 4;
+    const loopDef = CONTROL_DEFS.find((def) => def.id === "loopPoint");
+    const panDef = CONTROL_DEFS.find((def) => def.id === "pan");
+    if (!loopDef || !panDef) {
+      return;
+    }
+
+    for (let step = 0; step < SEQ_STEPS; step += 1) {
+      if (!this.stepAutomation[step]) {
+        this.stepAutomation[step] = {};
+      }
+
+      const hasHit = Boolean(this.pattern[trackIndex][step]);
+      const loopCenter = hasHit ? this.randomPadLoopPoint() : this.randomRange(0.08, 0.4);
+      const loopJitter = this.randomRange(-0.055, 0.055);
+      const loopPoint = this.snap(this.clamp(loopCenter + loopJitter, 0.04, 0.68), loopDef.step);
+
+      const panRange = hasHit ? 0.24 : 0.15;
+      const pan = this.snap(this.clamp(this.randomRange(-panRange, panRange), panDef.min, panDef.max), panDef.step);
+
+      this.stepAutomation[step][`loopPoint@${trackIndex}`] = loopPoint;
+      this.stepAutomation[step][`pan@${trackIndex}`] = pan;
+    }
   }
 
   randomizeVoiceSlotsFromLoaded() {
