@@ -726,7 +726,7 @@ class BullfrogDrums {
     const highNorm = highCount > 0 ? highSum / (highCount * 255) : 0;
 
     const overall = this.clamp(((lowNorm * 0.62 + highNorm * 0.38) - 0.02) * 2.05, 0, 1);
-    const spread = this.clamp((lowNorm - highNorm) * 0.28, -0.16, 0.16);
+    const spread = this.clamp((lowNorm - highNorm) * 0.18, -0.08, 0.08);
     const targetLeft = this.clamp(overall + spread, 0, 1);
     const targetRight = this.clamp(overall - spread, 0, 1);
 
