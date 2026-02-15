@@ -433,10 +433,10 @@ body {
   height: 70px;
   --honey-dot-size: 3.3px;
   --honey-dot-gap: 13px;
-  --honey-dot-alpha-base: 0.14;
-  --honey-dot-alpha-live: 0.12;
-  --honey-core-alpha: 0.025;
-  --honey-core-live: 0.1;
+  --honey-dot-alpha-base: 0.1;
+  --honey-dot-alpha-live: 0.08;
+  --honey-core-alpha: 0.01;
+  --honey-core-live: 0.05;
 }
 
 .geeky-logo-compact {
