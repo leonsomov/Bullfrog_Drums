@@ -389,12 +389,58 @@ body {
   cursor: pointer;
   transition: transform 120ms ease, filter 120ms ease;
   animation: geeky-lfo 7.2s ease-in-out infinite, geeky-rainbow 12.5s linear infinite;
+  position: relative;
+  z-index: 1;
+  will-change: transform, filter, opacity;
 }
 
 .geeky-logo-wrap {
   width: 100%;
+  min-height: 104px;
   display: grid;
   justify-items: center;
+  align-items: center;
+  position: relative;
+  isolation: isolate;
+}
+
+.geeky-logo-wrap::before {
+  content: "";
+  position: absolute;
+  width: 102px;
+  height: 102px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  background: conic-gradient(
+    from 0deg,
+    #ff3b30 0deg,
+    #ff9500 45deg,
+    #ffd60a 90deg,
+    #34c759 135deg,
+    #00c7be 180deg,
+    #0a84ff 225deg,
+    #5e5ce6 270deg,
+    #bf5af2 315deg,
+    #ff375f 360deg
+  );
+  filter: blur(15px) saturate(1.9);
+  opacity: 0.66;
+  transform: scale(0.84);
+  animation: geeky-aura-spin 12.5s linear infinite, geeky-aura-breath 5.8s ease-in-out infinite;
+}
+
+.geeky-logo-wrap::after {
+  content: "";
+  position: absolute;
+  width: 126px;
+  height: 126px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0) 68%);
+  opacity: 0.34;
+  animation: geeky-aura-breath 5.8s ease-in-out infinite reverse;
 }
 
 .geeky-logo-compact:hover {
@@ -469,6 +515,27 @@ body {
     opacity: 0.64;
     filter: brightness(0) invert(1) sepia(1) saturate(16) hue-rotate(360deg) brightness(0.62) contrast(1.18)
       drop-shadow(0 0 1px rgba(255, 30, 30, 0.2));
+  }
+}
+
+@keyframes geeky-aura-spin {
+  0% {
+    transform: scale(0.84) rotate(0deg);
+  }
+  100% {
+    transform: scale(0.84) rotate(360deg);
+  }
+}
+
+@keyframes geeky-aura-breath {
+  0% {
+    opacity: 0.28;
+  }
+  50% {
+    opacity: 0.82;
+  }
+  100% {
+    opacity: 0.28;
   }
 }
 
