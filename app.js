@@ -172,6 +172,11 @@ class BullfrogDrums {
     this.trackDrives = [];
     this.trackPans = [];
     this.noiseBuffer = null;
+    this.honeySpeakerEls = [];
+    this.honeyMeterNode = null;
+    this.honeyMeterBuffer = null;
+    this.honeyMeterFrame = null;
+    this.honeyLevels = [0, 0];
 
     this.readDom();
     this.buildPatternDefaults();
@@ -252,6 +257,8 @@ class BullfrogDrums {
     this.sourceMode = document.getElementById("sourceMode");
     this.statusLine = document.getElementById("statusLine");
     this.geekyLogoAction = document.getElementById("geekyLogoAction");
+    this.honeySpeakerEls = Array.from(document.querySelectorAll(".honey-grid"));
+    this.applyHoneyAnalyzerLevels(0, 0);
   }
 
   buildPatternDefaults() {
