@@ -435,10 +435,37 @@ body {
   outline-offset: 2px;
 }
 
+.speaker-export-state {
+  position: absolute;
+  top: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 88px;
+  padding: 0.22rem 0.42rem;
+  border-radius: 6px;
+  border: 1px solid rgba(110, 171, 196, 0.55);
+  background: linear-gradient(180deg, rgba(9, 13, 23, 0.96), rgba(7, 11, 18, 0.92));
+  color: #ff6a70;
+  font-size: 0.52rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+  font-weight: 700;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  pointer-events: none;
+  z-index: 3;
+  text-shadow: 0 0 8px rgba(255, 112, 120, 0.48);
+}
+
+.speaker-export-state.active {
+  opacity: 1;
+}
+
 .speaker-export-progress {
   --export-progress: 0;
   position: absolute;
-  top: 82px;
+  top: 86px;
   left: 50%;
   transform: translateX(-50%);
   width: 78px;

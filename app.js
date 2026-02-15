@@ -180,12 +180,17 @@ class BullfrogDrums {
     this.exportTapNode = null;
     this.masterSpeakerEl = null;
     this.speakerExportProgressEl = null;
+    this.speakerExportStateEl = null;
     this.isExportingLoop = false;
     this.exportProgressTimer = null;
     this.exportStepLimitActive = false;
     this.exportStepsRemaining = 0;
     this.exportStepBoundaryTimer = null;
     this.exportStepLimitResolver = null;
+    this.exportBoundaryWaitActive = false;
+    this.exportBoundaryResolver = null;
+    this.exportBoundaryArmTime = 0;
+    this.exportBoundarySteps = 0;
     this.exportBarsTotal = 16;
 
     this.readDom();
@@ -269,6 +274,7 @@ class BullfrogDrums {
     this.geekyLogoAction = document.getElementById("geekyLogoAction");
     this.masterSpeakerEl = document.querySelector(".master-honey");
     this.speakerExportProgressEl = document.getElementById("speakerExportProgress");
+    this.speakerExportStateEl = document.getElementById("speakerExportState");
     this.honeySpeakerEls = Array.from(document.querySelectorAll(".honey-grid"));
     this.applyHoneyAnalyzerLevels(0, 0);
   }
@@ -1354,6 +1360,7 @@ class BullfrogDrums {
     }
     this.isExportingLoop = true;
     this.setExportProgress(0.04, { active: true });
+    this.setExportPhase("Preparing");
     if (this.masterSpeakerEl) {
       this.masterSpeakerEl.classList.add("is-exporting");
     }
@@ -1385,6 +1392,7 @@ class BullfrogDrums {
       window.setTimeout(() => {
         if (!this.isExportingLoop) {
           this.setExportProgress(0, { active: false, done: false });
+          this.setExportPhase("");
         }
       }, 1200);
     }
@@ -1430,6 +1438,32 @@ class BullfrogDrums {
       clearInterval(this.exportProgressTimer);
       this.exportProgressTimer = null;
     }
+  }
+
+  setExportPhase(phaseText = "") {
+    if (!this.speakerExportStateEl) {
+      return;
+    }
+    const text = String(phaseText || "").trim();
+    this.speakerExportStateEl.textContent = text;
+    this.speakerExportStateEl.classList.toggle("active", text.length > 0);
+  }
+
+  beginExportBoundaryWait(totalSteps) {
+    this.clearExportBoundaryWait();
+    this.exportBoundaryWaitActive = true;
+    this.exportBoundarySteps = Math.max(1, Math.round(totalSteps));
+    this.exportBoundaryArmTime = this.audioCtx?.currentTime || 0;
+    return new Promise((resolve) => {
+      this.exportBoundaryResolver = resolve;
+    });
+  }
+
+  clearExportBoundaryWait() {
+    this.exportBoundaryWaitActive = false;
+    this.exportBoundaryResolver = null;
+    this.exportBoundaryArmTime = 0;
+    this.exportBoundarySteps = 0;
   }
 
   beginExportStepLimit(totalSteps) {
@@ -1483,7 +1517,8 @@ class BullfrogDrums {
       typeof MediaRecorder !== "undefined" &&
       Boolean(this.exportTapNode?.stream) &&
       this.exportTapNode.stream.getAudioTracks().length > 0;
-    if (!canRealtimeRecord) {
+    if (!canRealtimeRecord || !this.isPlaying || !this.loopEnabled) {
+      this.setExportPhase("Rendering");
       const rendered = await this.renderFourBarLoopOffline(exportBars);
       return this.audioBufferToWavBlob(rendered);
     }
@@ -1509,25 +1544,32 @@ class BullfrogDrums {
       );
     });
 
-    const wasPlaying = this.isPlaying;
-    const originalBank = this.patternBankIndex;
-    const finalTailSeconds = 0.14;
+    const waitForBoundaryMs = Math.max(2200, this.estimateCaptureSeconds(4) * 1000 + 1000);
+    let recorderStartCtxTime = 0;
+    let captureStartCtxTime = 0;
+    let captureEndCtxTime = 0;
 
     try {
+      this.setExportPhase("Preparing");
+      this.startExportProgressDrift(0.5, 0.62, waitForBoundaryMs);
+      const boundaryPromise = this.beginExportBoundaryWait(exportSteps);
+      const boundary = await Promise.race([
+        boundaryPromise,
+        new Promise((_, reject) => {
+          window.setTimeout(() => reject(new Error("Timed out waiting for next cycle boundary.")), waitForBoundaryMs);
+        })
+      ]);
+
+      captureStartCtxTime = boundary.boundaryTime;
+      this.setExportPhase("Recording");
+      recorderStartCtxTime = this.audioCtx.currentTime;
       recorder.start(120);
-      this.startExportProgressDrift(0.5, 0.93, (captureSeconds + finalTailSeconds) * 1000);
+      this.startExportProgressDrift(0.62, 0.93, Math.max(1200, captureSeconds * 1000));
 
-      if (wasPlaying) {
-        this.pauseTransport();
+      captureEndCtxTime = await boundary.donePromise;
+      if (!Number.isFinite(captureEndCtxTime)) {
+        captureEndCtxTime = this.audioCtx.currentTime;
       }
-      this.setPatternBank(0);
-      this.currentStep = this.sequenceStart;
-      const donePromise = this.beginExportStepLimit(exportSteps);
-      await this.startTransport();
-
-      await donePromise;
-      this.pauseTransport();
-      await new Promise((resolve) => window.setTimeout(resolve, finalTailSeconds * 1000));
 
       if (recorder.state !== "inactive") {
         recorder.stop();
@@ -1541,18 +1583,20 @@ class BullfrogDrums {
 
       try {
         const encoded = await recordedBlob.arrayBuffer();
+        this.setExportPhase("Rendering");
         const decoded = await this.audioCtx.decodeAudioData(encoded.slice(0));
-        return this.audioBufferToWavBlob(decoded);
+        const trimStartSeconds = Math.max(0, captureStartCtxTime - recorderStartCtxTime);
+        const trimDurationSeconds = Math.max(0.01, captureEndCtxTime - captureStartCtxTime);
+        const sliced = this.sliceAudioBuffer(decoded, trimStartSeconds, trimDurationSeconds);
+        return this.audioBufferToWavBlob(sliced);
       } catch (_decodeError) {
+        this.setExportPhase("Rendering");
         const rendered = await this.renderFourBarLoopOffline(exportBars);
         return this.audioBufferToWavBlob(rendered);
       }
     } finally {
+      this.clearExportBoundaryWait();
       this.clearExportStepLimit();
-      this.pauseTransport();
-      this.stopTransport();
-      this.setPatternBank(originalBank);
-      this.syncDataKnobToCurrentMode();
       if (recorder.state !== "inactive") {
         try {
           recorder.stop();
@@ -1562,6 +1606,31 @@ class BullfrogDrums {
         }
       }
     }
+  }
+
+  sliceAudioBuffer(audioBuffer, startSeconds, durationSeconds) {
+    if (!audioBuffer) {
+      return audioBuffer;
+    }
+
+    const sampleRate = audioBuffer.sampleRate || 48000;
+    const totalFrames = Math.max(1, audioBuffer.length || 1);
+    const startFrame = this.clamp(Math.floor(Math.max(0, startSeconds) * sampleRate), 0, totalFrames - 1);
+    const requestedFrames = Math.max(1, Math.floor(Math.max(0.001, durationSeconds) * sampleRate));
+    const frameCount = this.clamp(requestedFrames, 1, totalFrames - startFrame);
+
+    if (startFrame === 0 && frameCount >= totalFrames) {
+      return audioBuffer;
+    }
+
+    const channels = Math.max(1, audioBuffer.numberOfChannels || 1);
+    const sliced = this.audioCtx.createBuffer(channels, frameCount, sampleRate);
+    for (let channel = 0; channel < channels; channel += 1) {
+      const source = audioBuffer.getChannelData(Math.min(channel, audioBuffer.numberOfChannels - 1));
+      const target = sliced.getChannelData(channel);
+      target.set(source.subarray(startFrame, startFrame + frameCount));
+    }
+    return sliced;
   }
 
   async renderFourBarLoopOffline(totalBars = this.exportBarsTotal) {
@@ -2756,6 +2825,19 @@ class BullfrogDrums {
 
   scheduleStep(step, time) {
     this.lastScheduledStep = step;
+    if (
+      this.exportBoundaryWaitActive &&
+      this.exportBoundaryResolver &&
+      step === this.sequenceStart &&
+      this.patternBankIndex === 0 &&
+      time > this.exportBoundaryArmTime + 0.001
+    ) {
+      const resolveBoundary = this.exportBoundaryResolver;
+      this.exportBoundaryResolver = null;
+      this.exportBoundaryWaitActive = false;
+      const donePromise = this.beginExportStepLimit(this.exportBoundarySteps || SEQ_STEPS);
+      resolveBoundary({ boundaryTime: time, donePromise });
+    }
     this.applyStepAutomation(step);
     const secPerStep = 60 / this.controls.tempo / 4;
 
@@ -2803,7 +2885,7 @@ class BullfrogDrums {
         }
         this.exportStepBoundaryTimer = window.setTimeout(() => {
           this.exportStepBoundaryTimer = null;
-          resolve();
+          resolve(completeAt);
         }, waitMs);
       }
     }
